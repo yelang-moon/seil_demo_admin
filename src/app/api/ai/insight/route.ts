@@ -54,16 +54,59 @@ export async function POST(request: NextRequest) {
 - 설비 간 가동률 편차 분석 및 생산 라인 밸런싱 제안`
     }
 
-    const finalSectionNum = sectionCount + 1
-    const finalSection = `
+    // strategicSection already includes 종합 진단 + AI 전략 인사이트
 
-## ${finalSectionNum}. 종합 진단 및 개선 권고
+    const strategicSectionNum = sectionCount + 2
+    const strategicSection = `
+
+## ${sectionCount + 1}. 종합 진단 및 개선 권고
 - 현재 상태에 대한 솔직한 평가
 - 생산, 품질${hasShipment ? ', 출하' : ''}${hasSafetyStock ? ', 재고' : ''}${hasUtilization ? ', 가동률' : ''} 전반에 걸친 종합 진단
 - 구체적이고 실행 가능한 개선 방안 3~5개
-- 우선순위와 예상 효과 명시`
+- 우선순위와 예상 효과 명시
 
-    const systemPrompt = `당신은 한국 제조공장의 생산 데이터를 분석하는 전문가입니다.
+## ${strategicSectionNum}. AI 활용 전략 인사이트
+이 섹션에서는 위 데이터 분석 결과를 바탕으로, SEIL의 사업 특성에 맞는 AI 활용 전략을 제안합니다.
+아래 5개 영역에서 데이터에서 드러난 문제/기회와 연결하여 구체적 제안을 하세요:
+
+### ${strategicSectionNum}-1. 수요예측과 재고 최적화
+- 출하 데이터의 계절성, 고객사별 편차, 제품별 출하 패턴을 분석하여 수요예측 모델 구축 가능성 평가
+- 안전재고 기준이 적절한지 데이터 기반으로 평가하고, AI 기반 동적 안전재고 조정 제안
+- 마켓플레이스별(쿠팡, 네이버 등) 주문 패턴 분석을 통한 재고 최적화 방안
+
+### ${strategicSectionNum}-2. 생산 스케줄링 최적화
+- 가동률 데이터와 출하 데이터를 연계하여 생산 우선순위 자동 결정 가능성 평가
+- 설비 간 부하 불균형 해소를 위한 AI 기반 생산 스케줄링 제안
+- 금형 교체 최소화를 위한 제품 군집(배치) 최적화 방안
+
+### ${strategicSectionNum}-3. 품질 예측 및 불량 방지
+- 불량률 데이터 패턴에서 설비 노후화, 소재 변화, 작업 환경 등의 요인 분석
+- 설비 센서 데이터 + 생산 기록 결합을 통한 불량 사전 예측 모델 가능성
+- 비전 AI를 활용한 일회용 용기 외관 검사 자동화 효과 예측
+
+### ${strategicSectionNum}-4. 소재 전환 및 원가 최적화
+- 현재 생산 제품의 소재(PP, PS, PET) 구성 분석
+- 친환경 소재(PLA, 사탕수수 바가스, rPET) 전환 시 생산성/원가 영향 시뮬레이션 제안
+- 원자재 가격 변동 대응을 위한 대체 소재 추천 시스템 구축 방안
+
+### ${strategicSectionNum}-5. 해외 시장 확장 기회
+- 출하 데이터에서 아마존 등 해외 채널 비중 분석
+- 해외 일회용품 규제(EU SUP Directive, 미국 주별 규제) 대응 제품 포트폴리오 제안
+- AI 기반 해외 시장 수요 분석 및 최적 진입 전략`
+
+    const systemPrompt = `당신은 한국 제조공장의 생산 데이터를 분석하는 전문가이자, 일회용품 제조 산업의 AI 혁신 전략 컨설턴트입니다.
+
+## 분석 대상 회사 정보
+- 회사명: (주)에스이아이엘 (SEIL)
+- 소재지: 경기도 광주시
+- 주요 사업: 일회용 식품 용기, 컵, 수저, 빨대 등 제조
+- 소재: PP(폴리프로필렌), PS(폴리스타이렌), PET(폴리에틸렌테레프탈레이트)
+- 생산 방식: 사출 성형(성형부), 지기(종이 용기) 생산(지기생산부)
+- 판매 채널: 쿠팡, 네이버스토어, 11번가, SSG.COM, 옥션, 지마켓, 아마존 등 온라인 마켓플레이스
+- 특징: 다품종 소량생산 체계, 금형 기반 제조, B2C 온라인 판매 중심
+
+이 회사의 특성을 잘 이해한 상태에서 데이터를 분석하고, 일회용품 제조업체에 맞는 실질적 인사이트를 제공하세요.
+
 제공된 데이터를 기반으로 객관적이고 균형 잡힌 분석 리포트를 작성하세요.
 
 ## 출력 형식 규칙 (매우 중요)
@@ -105,7 +148,7 @@ export async function POST(request: NextRequest) {
 
 ## 4. 생산-출하 연계 분석
 - 생산량 대비 출하량 비교 (과잉생산/부족생산 판단)
-- 재고 축적 또는 소진 추세 분석${shipmentSection}${safetyStockSection}${utilizationSection}${finalSection}`
+- 재고 축적 또는 소진 추세 분석${shipmentSection}${safetyStockSection}${utilizationSection}${strategicSection}`
 
     let userMessage = `분석 기간: ${period}
 

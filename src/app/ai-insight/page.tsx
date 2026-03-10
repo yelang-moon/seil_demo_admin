@@ -490,7 +490,7 @@ export default function AIInsightPage() {
       <div className="flex-shrink-0 space-y-4 pb-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">AI 인사이트</h1>
-          <p className="text-gray-600 mt-2">Claude AI를 활용한 종합 생산·출하·재고 분석 리포트</p>
+          <p className="text-gray-600 mt-2">Claude AI를 활용한 종합 생산·출하·재고 분석 및 AI 전략 인사이트 리포트</p>
         </div>
 
         <Card className="p-4">
@@ -665,7 +665,11 @@ export default function AIInsightPage() {
         <Card className="p-12 text-center text-gray-500 flex-1 flex items-center justify-center">
           <div>
             <p className="text-lg mb-2">아직 분석 결과가 없습니다</p>
-            <p className="text-sm">위 &quot;AI 분석 시작&quot; 버튼을 눌러 생산·출하·재고 종합 분석을 실행하세요.</p>
+            <p className="text-sm">위 &quot;AI 분석 시작&quot; 버튼을 눌러 생산·출하·재고 종합 분석 및 AI 전략 인사이트를 확인하세요.</p>
+            <div className="mt-4 text-xs text-gray-400 max-w-md mx-auto">
+              <p>분석 항목: 생산 효율 · 품질/불량 · 작업자 생산성 · 출하량 · 안전재고 · 가동률</p>
+              <p className="mt-1">AI 전략: 수요예측 · 생산 스케줄링 · 품질 예측 · 소재 전환 · 해외 시장</p>
+            </div>
           </div>
         </Card>
       )}
