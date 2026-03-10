@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { formatNumber, formatPercent } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { useFactory } from "@/contexts/factory-context"
+import { EquipmentNameTooltip, ProductNameTooltip } from "@/components/common/name-tooltip"
 
 interface ProductionRow {
   equipment_name: string | null
@@ -367,7 +368,8 @@ export default function ProductionReport() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.rows.map((row, idx) => {
+                    {/* 가동 설비 (위쪽) */}
+                    {reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).map((row, idx) => {
                       const finishedQty = row.finished_qty || 0
                       const maxQty = row.daily_max_qty || 0
                       const utilRate =
@@ -387,10 +389,10 @@ export default function ProductionReport() {
                             {idx + 1}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {row.equipment_name || "-"}
+                            <EquipmentNameTooltip name={row.equipment_name || "-"} />
                           </TableCell>
                           <TableCell className="text-sm">
-                            {row.product_name || "-"}
+                            <ProductNameTooltip name={row.product_name || "-"} />
                           </TableCell>
                           <TableCell className="text-right text-sm">
                             {maxQty > 0 ? formatNumber(maxQty) : "-"}
@@ -437,6 +439,43 @@ export default function ProductionReport() {
                           <TableCell className="text-sm">
                             {row.note || "-"}
                           </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {/* 구분선: 미가동 설비 */}
+                    {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).length > 0 && (
+                      <TableRow className="bg-gray-200">
+                        <TableCell colSpan={15} className="text-center text-xs font-semibold text-gray-500 py-1">
+                          ── 미가동 설비 ──
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).map((row, idx) => {
+                      const finishedQty = row.finished_qty || 0
+                      const maxQty = row.daily_max_qty || 0
+                      const utilRate = maxQty > 0 ? finishedQty / maxQty : 0
+                      const defectQty = row.defect_qty || 0
+                      const defectRate = (row.finished_qty || 0) > 0 ? defectQty / (row.finished_qty || 1) : 0
+                      const packWorkers = row.pack_workers ? row.pack_workers.split(/[,/]/) : ["-", "-"]
+                      const operatingCount = reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).length
+
+                      return (
+                        <TableRow key={`idle-${idx}`} className="border-b hover:bg-gray-50 bg-gray-50 opacity-60">
+                          <TableCell className="w-10 text-right">{operatingCount + idx + 1}</TableCell>
+                          <TableCell className="font-medium"><EquipmentNameTooltip name={row.equipment_name || "-"} /></TableCell>
+                          <TableCell className="text-sm"><ProductNameTooltip name={row.product_name || "-"} /></TableCell>
+                          <TableCell className="text-right text-sm">{maxQty > 0 ? formatNumber(maxQty) : "-"}</TableCell>
+                          <TableCell className="text-right font-semibold">{finishedQty > 0 ? formatNumber(finishedQty) : "-"}</TableCell>
+                          <TableCell className={cn("text-right font-semibold", getUtilColor(finishedQty, maxQty))}>{maxQty > 0 ? formatPercent(utilRate) : "-"}</TableCell>
+                          <TableCell className="text-sm">{row.work_start_hhmm || "-"}</TableCell>
+                          <TableCell className="text-sm">{row.work_end_hhmm || "-"}</TableCell>
+                          <TableCell className="text-right text-sm">{row.work_minutes || "-"}</TableCell>
+                          <TableCell className="text-right text-sm">{defectQty > 0 ? formatNumber(defectQty) : "-"}</TableCell>
+                          <TableCell className="text-right text-sm">{(row.finished_qty || 0) > 0 ? formatPercent(defectRate) : "-"}</TableCell>
+                          <TableCell className="text-sm">{row.tech_worker || "-"}</TableCell>
+                          <TableCell className="text-sm">{packWorkers[0] || "-"}</TableCell>
+                          <TableCell className="text-sm">{packWorkers[1] || "-"}</TableCell>
+                          <TableCell className="text-sm">{row.note || "-"}</TableCell>
                         </TableRow>
                       )
                     })}

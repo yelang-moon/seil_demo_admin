@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatNumber, formatPercent } from "@/lib/utils"
-import { cn } from "@/lib/utils"
+import { EquipmentNameTooltip, ProductNameTooltip } from "@/components/common/name-tooltip"
 
 interface EquipmentCardProps {
   equipment: {
@@ -21,6 +21,56 @@ interface EquipmentCardProps {
   }
 }
 
+function MiniGauge({ rate, size = 80 }: { rate: number; size?: number }) {
+  const percentage = Math.min(rate * 100, 100)
+  const radius = size / 2 - 8
+  const circumference = Math.PI * radius
+  const strokeDashoffset = circumference - (percentage / 100) * circumference
+
+  const getColor = (pct: number) => {
+    if (pct >= 90) return "#22c55e"
+    if (pct >= 70) return "#eab308"
+    if (pct >= 50) return "#f97316"
+    return "#ef4444"
+  }
+
+  const color = getColor(percentage)
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg width={size} height={size / 2 + 12} viewBox={`0 0 ${size} ${size / 2 + 12}`}>
+        <path
+          d={`M ${8} ${size / 2 + 2} A ${radius} ${radius} 0 0 1 ${size - 8} ${size / 2 + 2}`}
+          fill="none"
+          stroke="#e5e7eb"
+          strokeWidth={7}
+          strokeLinecap="round"
+        />
+        <path
+          d={`M ${8} ${size / 2 + 2} A ${radius} ${radius} 0 0 1 ${size - 8} ${size / 2 + 2}`}
+          fill="none"
+          stroke={color}
+          strokeWidth={7}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          style={{ transition: "stroke-dashoffset 0.5s ease" }}
+        />
+        <text
+          x={size / 2}
+          y={size / 2 - 2}
+          textAnchor="middle"
+          fill={color}
+          fontSize={14}
+          fontWeight="bold"
+        >
+          {percentage.toFixed(1)}%
+        </text>
+      </svg>
+    </div>
+  )
+}
+
 export function EquipmentCard({
   equipment,
   production,
@@ -33,7 +83,7 @@ export function EquipmentCard({
       <Card className="bg-gray-100 opacity-60">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">
-            {equipment.name_official || equipment.name_short || "미지정"}
+            <EquipmentNameTooltip name={equipment.name_official || equipment.name_short || "미지정"} />
             {equipment.name_short && ` (${equipment.name_short})`}
           </CardTitle>
         </CardHeader>
@@ -47,13 +97,6 @@ export function EquipmentCard({
   const maxQty = productSpec?.daily_max_qty || 0
   const finishedQty = production.finished_qty || 0
   const utilRate = maxQty > 0 ? finishedQty / maxQty : 0
-
-  const utilColor = utilRate >= 0.9 ? "green" : utilRate >= 0.7 ? "yellow" : "red"
-  const utilColorClass = {
-    green: "text-green-600 bg-green-50",
-    yellow: "text-yellow-600 bg-yellow-50",
-    red: "text-red-600 bg-red-50",
-  }[utilColor]
 
   const workMinutes = production.work_minutes || 0
   const workHours = Math.floor(workMinutes / 60)
@@ -71,7 +114,7 @@ export function EquipmentCard({
         <div>
           <p className="text-xs text-gray-500">생산품명</p>
           <p className="text-sm font-medium">
-            {production.product_name || "-"}
+            <ProductNameTooltip name={production.product_name || "-"} />
           </p>
         </div>
 
@@ -90,9 +133,13 @@ export function EquipmentCard({
           </div>
         </div>
 
-        <div className={`p-2 rounded ${utilColorClass}`}>
-          <p className="text-xs">수율</p>
-          <p className="text-sm font-bold">{formatPercent(utilRate)}</p>
+        {/* 가동률 게이지 */}
+        <div className="flex flex-col items-center py-1">
+          <p className="text-xs text-gray-500 mb-1">가동률</p>
+          <MiniGauge rate={utilRate} size={90} />
+          <p className="text-xs text-gray-500 mt-0.5">
+            {formatNumber(finishedQty)} / {formatNumber(maxQty)}
+          </p>
         </div>
 
         <div>

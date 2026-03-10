@@ -55,9 +55,28 @@ interface EquipmentUtil {
   capacity: number
 }
 
-interface MonthlyData {
-  month: string
+interface WeeklyData {
+  week: string
   total: number
+}
+
+// KPI detail interfaces
+interface ProductionDetail {
+  product_name: string | null
+  equipment_name: string | null
+  finished_qty: number
+}
+
+interface EquipmentDetail {
+  equipment_name: string
+  product_name: string | null
+  finished_qty: number
+}
+
+interface WorkerDetail {
+  name: string
+  role: string
+  equipment_name: string | null
 }
 
 export default function Dashboard() {
@@ -76,8 +95,14 @@ export default function Dashboard() {
   const [equipmentProductionData, setEquipmentProductionData] = useState<EquipmentProduction[]>([])
   const [productMixData, setProductMixData] = useState<ProductData[]>([])
   const [equipmentUtilData, setEquipmentUtilData] = useState<EquipmentUtil[]>([])
-  const [monthlyTrendData, setMonthlyTrendData] = useState<MonthlyData[]>([])
+  const [weeklyTrendData, setWeeklyTrendData] = useState<WeeklyData[]>([])
   const [loading, setLoading] = useState(true)
+
+  // KPI detail data
+  const [productionDetails, setProductionDetails] = useState<ProductionDetail[]>([])
+  const [equipmentDetails, setEquipmentDetails] = useState<EquipmentDetail[]>([])
+  const [workerDetails, setWorkerDetails] = useState<WorkerDetail[]>([])
+  const [totalEquipmentCount, setTotalEquipmentCount] = useState(0)
 
   const getDaysBack = (type: PeriodType): number => {
     switch (type) {
@@ -95,6 +120,25 @@ export default function Dashboard() {
       startDate: start.toISOString().split("T")[0],
       endDate: end.toISOString().split("T")[0],
     }
+  }
+
+  // Helper: get ISO week string like "2024-W03"
+  const getWeekString = (dateStr: string): string => {
+    const d = new Date(dateStr + "T00:00:00")
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7))
+    const week1 = new Date(d.getFullYear(), 0, 4)
+    const weekNum = 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7)
+    const year = d.getFullYear()
+    return `${year}-W${String(weekNum).padStart(2, "0")}`
+  }
+
+  // Format week string for display
+  const formatWeekLabel = (weekStr: string): string => {
+    const parts = weekStr.split("-W")
+    const year = parts[0].slice(2)
+    const week = parseInt(parts[1])
+    return `${year}년 ${week}주`
   }
 
   // Fetch the latest date with data on mount or factory change
@@ -118,7 +162,7 @@ export default function Dashboard() {
     fetchLatestDate()
   }, [factory])
 
-  // Fetch KPI data (independent of period, always based on latestDate)
+  // Fetch KPI data
   const fetchKPIData = useCallback(async () => {
     if (!latestDate) return
 
@@ -131,9 +175,17 @@ export default function Dashboard() {
       // Fetch latest day data
       const { data: latestDayData } = await supabase
         .from("fact_production")
-        .select("finished_qty, equipment_name")
+        .select("finished_qty, equipment_name, product_name, tech_worker, pack_workers")
         .eq("production_date", latestDate)
         .eq("factory", factory)
+
+      // Fetch total equipment count
+      const { data: allEquipment } = await supabase
+        .from("dim_equipment")
+        .select("equipment_id")
+        .eq("factory", factory)
+
+      setTotalEquipmentCount(allEquipment?.length || 0)
 
       // Fetch current month data
       const { data: currentMonthData } = await supabase
@@ -143,7 +195,7 @@ export default function Dashboard() {
         .gte("production_date", currentMonth + "-01")
         .lte("production_date", latestDate)
 
-      // Fetch previous month data (full month)
+      // Fetch previous month data
       const prevMonthStart = prevMonth + "-01"
       const prevMonthEnd = new Date(
         parseInt(prevMonth.substring(0, 4)),
@@ -163,31 +215,65 @@ export default function Dashboard() {
         (sum, row) => sum + (row.finished_qty || 0), 0
       )
 
-      // KPI 2: Operating equipment on latest day
+      // Production details for popup
+      setProductionDetails((latestDayData || []).map(row => ({
+        product_name: row.product_name,
+        equipment_name: row.equipment_name,
+        finished_qty: row.finished_qty || 0,
+      })))
+
+      // KPI 2: Operating equipment
       const equipSet = new Set(
         (latestDayData || [])
           .filter(row => row.equipment_name)
           .map(row => row.equipment_name)
       )
 
-      // KPI 3: Defect rate (current month)
-      const totalProduced = (currentMonthData || []).reduce(
-        (sum, row) => sum + (row.produced_qty || 0), 0
-      )
-      const totalDefects = (currentMonthData || []).reduce(
-        (sum, row) => sum + (row.defect_qty || 0), 0
-      )
+      // Equipment details for popup
+      const equipMap = new Map<string, { product_name: string | null; finished_qty: number }>()
+      ;(latestDayData || []).forEach(row => {
+        if (row.equipment_name) {
+          if (!equipMap.has(row.equipment_name)) {
+            equipMap.set(row.equipment_name, { product_name: row.product_name, finished_qty: row.finished_qty || 0 })
+          } else {
+            equipMap.get(row.equipment_name)!.finished_qty += row.finished_qty || 0
+          }
+        }
+      })
+      const eDetails: EquipmentDetail[] = []
+      equipMap.forEach((val, key) => {
+        eDetails.push({ equipment_name: key, product_name: val.product_name, finished_qty: val.finished_qty })
+      })
+      setEquipmentDetails(eDetails)
+
+      // Worker details for popup
+      const workerMap = new Map<string, { role: string; equipment_name: string | null }>()
+      ;(latestDayData || []).forEach(row => {
+        if (row.tech_worker) {
+          workerMap.set(row.tech_worker, { role: "기술자", equipment_name: row.equipment_name })
+        }
+        if (row.pack_workers) {
+          row.pack_workers.split(/[,/]/).forEach((w: string) => {
+            const name = w.trim()
+            if (name) workerMap.set(name, { role: "포장", equipment_name: row.equipment_name })
+          })
+        }
+      })
+      const wDetails: WorkerDetail[] = []
+      workerMap.forEach((val, key) => {
+        wDetails.push({ name: key, role: val.role, equipment_name: val.equipment_name })
+      })
+      setWorkerDetails(wDetails)
+
+      // KPI 3: Defect rate
+      const totalProduced = (currentMonthData || []).reduce((sum, row) => sum + (row.produced_qty || 0), 0)
+      const totalDefects = (currentMonthData || []).reduce((sum, row) => sum + (row.defect_qty || 0), 0)
       const defectRate = totalProduced > 0 ? totalDefects / totalProduced : 0
 
       // KPI 4: Month-over-month
-      const thisMonthTotal = (currentMonthData || []).reduce(
-        (sum, row) => sum + (row.finished_qty || 0), 0
-      )
-      const prevMonthTotal = (prevMonthData || []).reduce(
-        (sum, row) => sum + (row.finished_qty || 0), 0
-      )
+      const thisMonthTotal = (currentMonthData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
+      const prevMonthTotal = (prevMonthData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
 
-      // Format month labels (e.g., "3월" vs "2월")
       const latestMonthNum = parseInt(currentMonth.substring(5, 7))
       const prevMonthNum = parseInt(prevMonth.substring(5, 7))
 
@@ -204,7 +290,7 @@ export default function Dashboard() {
     }
   }, [latestDate, factory])
 
-  // Fetch chart data (depends on period)
+  // Fetch chart data
   const fetchChartData = useCallback(async () => {
     if (!latestDate) return
     setLoading(true)
@@ -214,7 +300,6 @@ export default function Dashboard() {
       const { startDate, endDate } = getDateRange(daysBack, latestDate)
       const currentMonth = latestDate.substring(0, 7)
 
-      // Fetch production data for charts
       const { data: productionData } = await supabase
         .from("fact_production")
         .select("*")
@@ -225,65 +310,44 @@ export default function Dashboard() {
 
       if (!productionData) return
 
-      // Current month data (for equipment chart, product mix, utilization)
       const thisMonthData = productionData.filter(
         (row) => row.production_date?.substring(0, 7) === currentMonth
       )
 
-      // Process daily trend data
+      // Daily trend
       const dailyMap = new Map<string, DailyProduction>()
       productionData.forEach((row) => {
         const date = row.production_date || ""
-        if (!dailyMap.has(date)) {
-          dailyMap.set(date, { date, total: 0, details: [] })
-        }
+        if (!dailyMap.has(date)) dailyMap.set(date, { date, total: 0, details: [] })
         const entry = dailyMap.get(date)!
         entry.total += row.finished_qty || 0
-        entry.details.push({
-          date,
-          product_name: row.product_name,
-          finished_qty: row.finished_qty || 0,
-          equipment_name: row.equipment_name,
-        })
+        entry.details.push({ date, product_name: row.product_name, finished_qty: row.finished_qty || 0, equipment_name: row.equipment_name })
       })
       setDailyTrendData(Array.from(dailyMap.values()))
 
-      // Process equipment production data (current month only)
+      // Equipment production
       const equipmentMap = new Map<string, EquipmentProduction>()
       thisMonthData.forEach((row) => {
         const equipName = row.equipment_name || "미지정"
-        if (!equipmentMap.has(equipName)) {
-          equipmentMap.set(equipName, { equipment_name: equipName, total: 0, details: [] })
-        }
+        if (!equipmentMap.has(equipName)) equipmentMap.set(equipName, { equipment_name: equipName, total: 0, details: [] })
         const entry = equipmentMap.get(equipName)!
         entry.total += row.finished_qty || 0
-        entry.details.push({
-          equipment_name: equipName,
-          product_name: row.product_name,
-          finished_qty: row.finished_qty || 0,
-        })
+        entry.details.push({ equipment_name: equipName, product_name: row.product_name, finished_qty: row.finished_qty || 0 })
       })
       setEquipmentProductionData(Array.from(equipmentMap.values()))
 
-      // Process product mix data (current month, top 10)
+      // Product mix (top 10)
       const productMap = new Map<string, ProductData>()
       thisMonthData.forEach((row) => {
         const prodName = row.product_name || "미지정"
-        if (!productMap.has(prodName)) {
-          productMap.set(prodName, { product_name: prodName, value: 0, details: [] })
-        }
+        if (!productMap.has(prodName)) productMap.set(prodName, { product_name: prodName, value: 0, details: [] })
         const entry = productMap.get(prodName)!
         entry.value += row.finished_qty || 0
-        entry.details.push({
-          date: row.production_date || "",
-          finished_qty: row.finished_qty || 0,
-        })
+        entry.details.push({ date: row.production_date || "", finished_qty: row.finished_qty || 0 })
       })
-      setProductMixData(
-        Array.from(productMap.values()).sort((a, b) => b.value - a.value).slice(0, 10)
-      )
+      setProductMixData(Array.from(productMap.values()).sort((a, b) => b.value - a.value).slice(0, 10))
 
-      // Process equipment utilization (current month average)
+      // Equipment utilization
       const { data: productDims } = await supabase
         .from("dim_product")
         .select("equipment_name, daily_max_qty")
@@ -292,43 +356,31 @@ export default function Dashboard() {
       const utilMap = new Map<string, { actual: number }>()
       thisMonthData.forEach((row) => {
         const equipName = row.equipment_name || "미지정"
-        if (!utilMap.has(equipName)) {
-          utilMap.set(equipName, { actual: 0 })
-        }
+        if (!utilMap.has(equipName)) utilMap.set(equipName, { actual: 0 })
         utilMap.get(equipName)!.actual += row.finished_qty || 0
       })
 
       const utilData: EquipmentUtil[] = []
       utilMap.forEach((value, equipName) => {
-        const maxQty = productDims?.find(
-          (p) => p.equipment_name === equipName
-        )?.daily_max_qty || 0
-        const daysWorked = new Set(
-          thisMonthData
-            .filter((r) => r.equipment_name === equipName)
-            .map((r) => r.production_date)
-        ).size
-        utilData.push({
-          equipment_name: equipName,
-          actual: Math.round(value.actual / Math.max(daysWorked, 1)),
-          capacity: maxQty || 0,
-        })
+        const maxQty = productDims?.find((p) => p.equipment_name === equipName)?.daily_max_qty || 0
+        const daysWorked = new Set(thisMonthData.filter((r) => r.equipment_name === equipName).map((r) => r.production_date)).size
+        utilData.push({ equipment_name: equipName, actual: Math.round(value.actual / Math.max(daysWorked, 1)), capacity: maxQty || 0 })
       })
       setEquipmentUtilData(utilData)
 
-      // Process monthly trend data
-      const monthlyMap = new Map<string, number>()
+      // Weekly trend (instead of monthly)
+      const weeklyMap = new Map<string, number>()
       productionData.forEach((row) => {
-        const month = row.production_date?.substring(0, 7) || ""
-        if (month) {
-          monthlyMap.set(month, (monthlyMap.get(month) || 0) + (row.finished_qty || 0))
+        const date = row.production_date
+        if (date) {
+          const weekKey = getWeekString(date)
+          weeklyMap.set(weekKey, (weeklyMap.get(weekKey) || 0) + (row.finished_qty || 0))
         }
       })
-      setMonthlyTrendData(
-        Array.from(monthlyMap.entries())
+      setWeeklyTrendData(
+        Array.from(weeklyMap.entries())
           .sort((a, b) => a[0].localeCompare(b[0]))
-          .slice(-12)
-          .map(([month, total]) => ({ month, total }))
+          .map(([week, total]) => ({ week: formatWeekLabel(week), total }))
       )
     } catch (error) {
       console.error("Error fetching chart data:", error)
@@ -346,14 +398,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">메인 대시보드</h1>
           {latestDate && (
-            <p className="text-sm text-gray-500 mt-1">
-              데이터 기준일: {latestDate}
-            </p>
+            <p className="text-sm text-gray-500 mt-1">데이터 기준일: {latestDate}</p>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -375,10 +424,16 @@ export default function Dashboard() {
         <div className="text-center py-12 text-gray-500">데이터 로딩 중...</div>
       ) : (
         <>
-          {/* KPI Cards */}
-          <KPICards {...kpiData} latestDate={latestDate} />
+          <KPICards
+            {...kpiData}
+            latestDate={latestDate}
+            productionDetails={productionDetails}
+            equipmentDetails={equipmentDetails}
+            workerDetails={workerDetails}
+            totalEquipmentCount={totalEquipmentCount}
+            factory={factory}
+          />
 
-          {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <DailyTrendChart data={dailyTrendData as any} />
             <EquipmentProductionChart data={equipmentProductionData as any} />
@@ -386,9 +441,8 @@ export default function Dashboard() {
             <EquipmentUtilizationChart data={equipmentUtilData as any} />
           </div>
 
-          {/* Full width monthly trend */}
           <div className="mt-6">
-            <MonthlyTrendChart data={monthlyTrendData} />
+            <MonthlyTrendChart data={weeklyTrendData} />
           </div>
         </>
       )}
