@@ -9,23 +9,17 @@ import { supabase } from '@/lib/supabase'
 import { Production } from '@/types/database'
 import { useFactory } from '@/contexts/factory-context'
 
-type PresetType = '1month' | '2months' | '3months' | '4months' | '5months' | '6months' | 'custom'
+type PresetType = '1month' | '3months' | '6months' | 'custom'
 
 const PRESET_LABELS: Record<string, string> = {
   '1month': '1개월',
-  '2months': '2개월',
   '3months': '3개월',
-  '4months': '4개월',
-  '5months': '5개월',
   '6months': '6개월',
 }
 
 const PRESET_DAYS: Record<string, number> = {
   '1month': 30,
-  '2months': 60,
   '3months': 90,
-  '4months': 120,
-  '5months': 150,
   '6months': 180,
 }
 

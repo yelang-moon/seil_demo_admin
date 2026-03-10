@@ -11,23 +11,17 @@ import { MonthlyTrendChart } from "@/components/dashboard/monthly-trend-chart"
 import { Button } from "@/components/ui/button"
 import { useFactory } from "@/contexts/factory-context"
 
-type PresetType = "1month" | "2months" | "3months" | "4months" | "5months" | "6months" | "custom"
+type PresetType = "1month" | "3months" | "6months" | "custom"
 
 const PRESET_LABELS: Record<string, string> = {
   "1month": "1개월",
-  "2months": "2개월",
   "3months": "3개월",
-  "4months": "4개월",
-  "5months": "5개월",
   "6months": "6개월",
 }
 
 const PRESET_DAYS: Record<string, number> = {
   "1month": 30,
-  "2months": 60,
   "3months": 90,
-  "4months": 120,
-  "5months": 150,
   "6months": 180,
 }
 
@@ -196,15 +190,16 @@ export default function Dashboard() {
 
   // Fetch KPI data
   const fetchKPIData = useCallback(async () => {
-    if (!latestDate) return
+    if (!chartStartDate || !chartEndDate) return
 
     try {
-      // Period: last 30 days from latestDate
-      const periodEnd = new Date(latestDate + "T00:00:00")
-      const periodStart = new Date(periodEnd.getTime() - 30 * 24 * 60 * 60 * 1000)
-      const periodStartStr = periodStart.toISOString().split("T")[0]
+      // Use chart period for KPI calculations
+      const periodStartStr = chartStartDate
+      const periodEndStr = chartEndDate
 
-      // Last year same period
+      // Last year same period (1년 전 동기간)
+      const periodEnd = new Date(chartEndDate + "T00:00:00")
+      const periodStart = new Date(chartStartDate + "T00:00:00")
       const lastYearEnd = new Date(periodEnd)
       lastYearEnd.setFullYear(lastYearEnd.getFullYear() - 1)
       const lastYearStart = new Date(periodStart)
@@ -220,13 +215,13 @@ export default function Dashboard() {
 
       setTotalEquipmentCount(allEquipment?.length || 0)
 
-      // Fetch period data (last 30 days) - used for all KPIs
+      // Fetch period data - used for all KPIs
       const { data: periodData } = await supabase
         .from("fact_production")
         .select("finished_qty, produced_qty, defect_qty, equipment_name, product_name, tech_worker, pack_workers")
         .eq("factory", factory)
         .gte("production_date", periodStartStr)
-        .lte("production_date", latestDate)
+        .lte("production_date", periodEndStr)
 
       // Fetch last year same period data
       const { data: lastYearData } = await supabase
@@ -305,7 +300,7 @@ export default function Dashboard() {
       const lastYearTotal = (lastYearData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
 
       // Period labels
-      const periodLabel = `${formatShortDate(periodStartStr)} ~ ${formatShortDate(latestDate)}`
+      const periodLabel = `${formatShortDate(periodStartStr)} ~ ${formatShortDate(periodEndStr)}`
       const lastYearPeriodLabel = `${formatShortDate(lastYearStartStr)} ~ ${formatShortDate(lastYearEndStr)}`
 
       setKpiData({
@@ -320,7 +315,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error fetching KPI data:", error)
     }
-  }, [latestDate, factory])
+  }, [chartStartDate, chartEndDate, factory])
 
   // Fetch chart data
   const fetchChartData = useCallback(async () => {
@@ -421,8 +416,8 @@ export default function Dashboard() {
   }, [chartStartDate, chartEndDate, factory])
 
   useEffect(() => {
-    if (latestDate) fetchKPIData()
-  }, [latestDate, fetchKPIData])
+    if (chartStartDate && chartEndDate) fetchKPIData()
+  }, [chartStartDate, chartEndDate, fetchKPIData])
 
   useEffect(() => {
     if (chartStartDate && chartEndDate) fetchChartData()

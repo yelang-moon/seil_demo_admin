@@ -24,20 +24,22 @@ export function DateNavigator({ value, onChange }: DateNavigatorProps) {
 
   const shiftDate = (days: number) => {
     if (!value) return
-    const d = new Date(value + "T00:00:00")
-    d.setDate(d.getDate() + days)
-    onChange(d.toISOString().split("T")[0])
+    // Parse YYYY-MM-DD parts directly to avoid timezone issues
+    const [y, m, d] = value.split("-").map(Number)
+    const date = new Date(y, m - 1, d + days)
+    const newY = date.getFullYear()
+    const newM = String(date.getMonth() + 1).padStart(2, "0")
+    const newD = String(date.getDate()).padStart(2, "0")
+    onChange(`${newY}-${newM}-${newD}`)
   }
 
   const formatDisplayDate = (dateStr: string) => {
     if (!dateStr) return "날짜 선택"
-    const d = new Date(dateStr + "T00:00:00")
+    const [y, m, d] = dateStr.split("-").map(Number)
+    const date = new Date(y, m - 1, d)
     const dayNames = ["일", "월", "화", "수", "목", "금", "토"]
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, "0")
-    const day = String(d.getDate()).padStart(2, "0")
-    const dayName = dayNames[d.getDay()]
-    return `${year}.${month}.${day} (${dayName})`
+    const dayName = dayNames[date.getDay()]
+    return `${y}.${String(m).padStart(2, "0")}.${String(d).padStart(2, "0")} (${dayName})`
   }
 
   return (
@@ -49,12 +51,11 @@ export function DateNavigator({ value, onChange }: DateNavigatorProps) {
       >
         ‹
       </button>
-      <div
-        className="relative"
-        onMouseEnter={() => setShowPicker(true)}
-        onMouseLeave={() => setShowPicker(false)}
-      >
-        <div className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50 min-w-[160px] text-center">
+      <div className="relative">
+        <div
+          className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium cursor-pointer hover:bg-gray-50 min-w-[160px] text-center select-none"
+          onClick={() => setShowPicker((prev) => !prev)}
+        >
           {formatDisplayDate(value)}
         </div>
         {showPicker && (
@@ -64,6 +65,7 @@ export function DateNavigator({ value, onChange }: DateNavigatorProps) {
               value={value}
               onChange={(e) => { onChange(e.target.value); setShowPicker(false) }}
               className="px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              autoFocus
             />
           </div>
         )}

@@ -80,15 +80,15 @@ export function EquipmentCard({
 
   if (!hasProduction) {
     return (
-      <Card className="bg-gray-100 opacity-60">
+      <Card className="bg-gray-100 border-gray-200">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">
+          <CardTitle className="text-sm text-gray-400">
             <EquipmentNameTooltip name={equipment.name_official || equipment.name_short || "미지정"} />
-            {equipment.name_short && ` (${equipment.name_short})`}
+            {equipment.name_short && <span className="text-gray-400"> ({equipment.name_short})</span>}
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-gray-500 text-sm py-4">미가동</div>
+          <div className="text-gray-400 text-sm py-4">미가동</div>
         </CardContent>
       </Card>
     )
