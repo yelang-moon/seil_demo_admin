@@ -111,16 +111,16 @@ export default function DailyReport() {
         let totalProduction = 0
         let operatingCount = 0
         const equipmentData = allEquipment.map((equip) => {
-          const prod = productionByEquip.get(
-            equip.name_official || equip.name_legacy
-          )
+          // fact_production uses legacy names (e.g. "HRP-8온스")
+          const legacyName = equip.name_legacy || ""
+          const prod = productionByEquip.get(legacyName)
           if (prod) {
             totalProduction += prod.finished_qty || 0
             operatingCount += 1
           }
 
           const spec = productSpecs?.find(
-            (p) => p.equipment_name === (equip.name_official || equip.name_legacy)
+            (p) => p.equipment_name === legacyName
           )
 
           return {

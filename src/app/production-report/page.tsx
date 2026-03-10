@@ -111,17 +111,19 @@ export default function ProductionReport() {
         let totalDefects = 0
 
         const rows = allEquipment.map((equip) => {
-          const equipName = equip.name_official || equip.name_legacy
-          const prodList = productionByEquip.get(equipName) || []
+          // fact_production uses legacy names (e.g. "HRP-8온스"), not official names
+          const legacyName = equip.name_legacy || ""
+          const displayName = equip.name_official || equip.name_legacy
+          const prodList = productionByEquip.get(legacyName) || []
 
           let row: ProductionRow
           if (prodList.length === 0) {
             // No production for this equipment
             row = {
-              equipment_name: equipName,
+              equipment_name: displayName,
               product_name: null,
               daily_max_qty: productSpecs?.find(
-                (p) => p.equipment_name === equipName
+                (p) => p.equipment_name === legacyName
               )?.daily_max_qty || null,
               finished_qty: null,
               produced_qty: null,
@@ -137,10 +139,10 @@ export default function ProductionReport() {
             // Use first production record (there might be multiple products per equipment)
             const prod = prodList[0]
             row = {
-              equipment_name: equipName,
+              equipment_name: displayName,
               product_name: prod.product_name,
               daily_max_qty: productSpecs?.find(
-                (p) => p.equipment_name === equipName
+                (p) => p.equipment_name === legacyName
               )?.daily_max_qty || prod.produced_qty || 0,
               finished_qty: prod.finished_qty,
               produced_qty: prod.produced_qty,
