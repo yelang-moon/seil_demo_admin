@@ -16,8 +16,7 @@ import {
   ChevronRight,
   ShieldAlert,
   Truck,
-  Monitor,
-  BarChart3,
+  Globe,
   MessageCircle,
 } from "lucide-react"
 import { useState } from "react"
@@ -36,12 +35,11 @@ const navItems: NavItem[] = [
     icon: <LayoutDashboard className="h-4 w-4" />,
     children: [
       { label: "메인 대시보드", href: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
-      { label: "공장 현황판", href: "/factory-monitor", icon: <Monitor className="h-4 w-4" /> },
       { label: "일보 (일일보고)", href: "/daily-report", icon: <FileText className="h-4 w-4" /> },
       { label: "생산보고", href: "/production-report", icon: <ClipboardList className="h-4 w-4" /> },
       { label: "안전 재고 대시보드", href: "/safety-stock", icon: <ShieldAlert className="h-4 w-4" /> },
       { label: "출하량 대시보드", href: "/shipment-dashboard", icon: <Truck className="h-4 w-4" /> },
-      { label: "채널 분석", href: "/channel-analysis", icon: <BarChart3 className="h-4 w-4" /> },
+      { label: "판매 채널 전략", href: "/channel-analysis", icon: <Globe className="h-4 w-4" /> },
     ],
   },
   {

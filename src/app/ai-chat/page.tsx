@@ -15,30 +15,30 @@ interface Message {
   content: string
 }
 
-// 초기 프리셋 질문 — 카테고리별로 구분
+// 초기 프리셋 질문 — 카테고리별로 구분 (전략적 질문 포함)
 const INITIAL_PRESETS: { category: string; questions: string[] }[] = [
   {
-    category: '생산',
+    category: '생산·품질',
     questions: [
-      '최근 생산 현황을 요약해줘',
-      '불량률이 가장 높은 설비와 원인 분석해줘',
-      '설비별 가동률 비교 테이블 보여줘',
+      '최근 생산 현황과 품질 이슈를 요약해줘',
+      '불량률이 높은 설비의 원인과 개선 방안은?',
+      '설비 가동률 편차가 크면 어떤 리스크가 있어?',
     ],
   },
   {
-    category: '출하·매출',
+    category: '채널·해외',
     questions: [
-      '채널별 매출 비중 분석해줘',
-      '매출 TOP 10 제품 테이블로 보여줘',
-      '쿠팡 vs 네이버 출하 비교해줘',
+      '아마존(해외) 출하 현황과 성장 추이 분석해줘',
+      'B2B 식품사 vs 온라인 마켓 매출 비중은?',
+      '해외 진출 확대를 위해 어떤 제품이 유리할까?',
     ],
   },
   {
-    category: '재고·품질',
+    category: '시장·전략',
     questions: [
-      '안전재고 부족 제품 긴급도별로 정리해줘',
-      '불량률 추이가 악화되는 설비 있어?',
-      '재고 과잉인 제품은?',
+      '친환경 포장재 시장 트렌드와 SEIL 대응 전략은?',
+      '일회용품 규제 강화가 우리 사업에 미치는 영향은?',
+      'PP/PET 원자재 가격 동향과 원가 관리 방안은?',
     ],
   },
 ]
@@ -61,17 +61,35 @@ function getFollowUpPresets(lastUserQ: string, lastAssistantA: string): string[]
     suggestions.push('불량이 많은 제품군은 어떤 것들이야?')
     suggestions.push('불량률과 작업시간의 상관관계 분석해줘')
   }
-  // 출하/매출 관련
+  // 출하/매출/채널 관련
   if (q.includes('출하') || q.includes('매출') || q.includes('채널') || q.includes('쿠팡') || q.includes('네이버')) {
-    suggestions.push('월별 매출 추이 분석해줘')
+    suggestions.push('B2B 식품사 vs 온라인마켓 비중 추이는?')
     suggestions.push('채널별 주력 제품이 다른가?')
-    suggestions.push('매출 성장률이 높은 제품은?')
+    suggestions.push('매출 성장률이 높은 채널과 제품은?')
+  }
+  // 해외/수출/아마존 관련
+  if (q.includes('해외') || q.includes('수출') || q.includes('아마존') || q.includes('글로벌')) {
+    suggestions.push('해외 채널에서 잘 팔리는 제품 특징은?')
+    suggestions.push('해외 진출 확대를 위한 생산 캐파 여유는?')
+    suggestions.push('일본/동남아 시장 진출 가능성은?')
+  }
+  // 소재/친환경 관련
+  if (q.includes('소재') || q.includes('친환경') || q.includes('종이') || q.includes('pla') || q.includes('pp') || q.includes('pet')) {
+    suggestions.push('소재별 생산 효율과 불량률 비교해줘')
+    suggestions.push('친환경 소재 전환 시 원가 영향은?')
+    suggestions.push('해외 규제에 맞는 소재 전환 전략은?')
   }
   // 재고 관련
   if (q.includes('재고') || q.includes('안전재고') || q.includes('부족')) {
     suggestions.push('재고 부족 제품의 최근 출하 추이 보여줘')
     suggestions.push('안전재고 기준이 적절한지 평가해줘')
     suggestions.push('재고 과잉 제품 처리 방안 제안해줘')
+  }
+  // 시장/규제/트렌드 관련
+  if (q.includes('시장') || q.includes('트렌드') || q.includes('규제') || q.includes('전략') || q.includes('전망')) {
+    suggestions.push('경쟁사 대비 SEIL의 강점은?')
+    suggestions.push('향후 6개월 시장 전망에 따른 대응은?')
+    suggestions.push('멀티채널 다각화 현황을 평가해줘')
   }
   // TOP/랭킹 관련
   if (q.includes('top') || q.includes('랭킹') || q.includes('순위') || q.includes('비교')) {
@@ -80,16 +98,15 @@ function getFollowUpPresets(lastUserQ: string, lastAssistantA: string): string[]
   }
   // 응답에 테이블이 포함된 경우
   if (a.includes('|---') || a.includes('| ---')) {
-    suggestions.push('이 데이터를 차트로 시각화하면 어떤 인사이트가 보여?')
     suggestions.push('이 중 이상치(outlier)가 있어?')
   }
 
-  // 공통 후속 질문 추가
+  // 공통 후속 질문 추가 (전략적)
   if (suggestions.length < 4) {
-    suggestions.push('더 자세히 분석해줘')
+    suggestions.push('외부 시장 환경을 고려한 분석을 해줘')
   }
   if (suggestions.length < 4) {
-    suggestions.push('개선 방안을 제안해줘')
+    suggestions.push('구체적 실행 방안을 제안해줘')
   }
 
   return suggestions.slice(0, 4)
@@ -395,12 +412,19 @@ export default function AIChatPage() {
         ) : messages.length === 0 ? (
           <div className="py-6">
             {/* Value Proposition */}
-            <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 mb-6 p-4">
-              <p className="text-sm text-gray-700 leading-relaxed">
-                <strong className="text-blue-700">대시보드로는 답할 수 없는 질문</strong>에 AI가 답합니다.
-                &quot;왜 불량률이 올랐지?&quot;, &quot;어떤 채널에 집중해야 하지?&quot; 같은 맥락적 질문을 자연어로 하면
-                데이터를 분석해서 근거와 함께 답변합니다.
-              </p>
+            <Card className="bg-gradient-to-br from-slate-900 to-slate-800 text-white border-0 mb-6 p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <span className="text-lg">🤖</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm mb-1">내부 데이터 + 외부 시장 정보 = 복합 인사이트</h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    생산·출하·재고 데이터뿐 아니라 <strong className="text-blue-300">업계 뉴스, 원자재 동향, 규제 변화</strong>까지
+                    종합하여 답변합니다. 해외 진출 전략, 소재 전환, 채널 다각화 같은 전략적 질문도 가능합니다.
+                  </p>
+                </div>
+              </div>
             </Card>
 
             {/* Categorized Preset Questions */}

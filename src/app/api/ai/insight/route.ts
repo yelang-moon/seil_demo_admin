@@ -1,5 +1,6 @@
 import { streamClaude } from '@/lib/claude'
 import { NextRequest, NextResponse } from 'next/server'
+import { fetchIndustryNews } from '@/lib/external-context'
 
 export async function POST(request: NextRequest) {
   try {
@@ -130,6 +131,9 @@ export async function POST(request: NextRequest) {
 - 문제점과 개선이 필요한 부분을 명확히 지적하세요.
 - 가동률이 낮거나 불량률이 높은 설비/제품은 구체적으로 언급하세요.
 - 재고 부족 위험 제품은 긴급도에 따라 강조하세요.
+- **외부 시장 동향도 반드시 반영하세요**: 제공된 업계 뉴스, 원자재 시세, 규제 변화 등 외부 요인을 데이터 분석과 연계하여 인사이트를 제공하세요.
+- 각 분석 섹션에서 외부 환경 요인(시장 변화, 규제, 경쟁 등)이 SEIL에 미치는 영향을 언급하세요.
+- 뉴스 출처가 있으면 적절히 인용하고, 관련 링크가 있으면 포함하세요.
 
 ## 분석 영역 (각각 ## 제목으로 구분)
 
@@ -187,6 +191,24 @@ ${JSON.stringify(safetyStockData, null, 2)}`
 설비 가동률 데이터 (실제 가동일 기준):
 - 분석 기간 내 실제 가동일수: ${utilizationData.workingDayCount}일
 ${JSON.stringify(utilizationData.equipmentUtilization, null, 2)}`
+    }
+
+    // 외부 뉴스/시장 동향 수집 (병렬로 실행)
+    let externalContext = ''
+    try {
+      externalContext = await fetchIndustryNews(12)
+    } catch {
+      externalContext = '(외부 뉴스 수집 실패 - 내부 데이터 기반으로 분석합니다)'
+    }
+
+    if (externalContext) {
+      userMessage += `
+
+---
+${externalContext}
+---
+위 외부 뉴스와 시장 동향을 참고하여, 내부 데이터 분석과 연계한 종합적 인사이트를 제공하세요.
+특히 AI 활용 전략 인사이트, 종합 진단 섹션에서 외부 환경 요인을 적극 반영하세요.`
     }
 
     const streamBody = await streamClaude(systemPrompt, userMessage)

@@ -16,8 +16,7 @@ import {
   Database,
   ShieldAlert,
   Truck,
-  Monitor,
-  BarChart3,
+  Globe,
   MessageCircle,
 } from "lucide-react"
 import { useState } from "react"
@@ -25,12 +24,11 @@ import { useFactory, FactoryType } from "@/contexts/factory-context"
 
 const allLinks = [
   { label: "메인 대시보드", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "대시보드" },
-  { label: "공장 현황판", href: "/factory-monitor", icon: <Monitor className="h-4 w-4" />, group: "대시보드" },
   { label: "일보 (일일보고)", href: "/daily-report", icon: <FileText className="h-4 w-4" />, group: "대시보드" },
   { label: "생산보고", href: "/production-report", icon: <ClipboardList className="h-4 w-4" />, group: "대시보드" },
   { label: "안전 재고 대시보드", href: "/safety-stock", icon: <ShieldAlert className="h-4 w-4" />, group: "대시보드" },
   { label: "출하량 대시보드", href: "/shipment-dashboard", icon: <Truck className="h-4 w-4" />, group: "대시보드" },
-  { label: "채널 분석", href: "/channel-analysis", icon: <BarChart3 className="h-4 w-4" />, group: "대시보드" },
+  { label: "판매 채널 전략", href: "/channel-analysis", icon: <Globe className="h-4 w-4" />, group: "대시보드" },
   { label: "AI 인사이트", href: "/ai-insight", icon: <Bot className="h-4 w-4" />, group: "AI" },
   { label: "AI 챗봇", href: "/ai-chat", icon: <MessageCircle className="h-4 w-4" />, group: "AI" },
   { label: "장비 관리", href: "/admin/equipment", icon: <Factory className="h-4 w-4" />, group: "데이터 관리" },
