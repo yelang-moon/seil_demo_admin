@@ -178,19 +178,21 @@ export default function ShipmentDashboardPage() {
         setStartDate(dateFormatISO(oneMonthAgo))
       }
 
-      // Fetch all shipment data
+      // Fetch all shipment data (use range to bypass 1000 row default limit)
       const { data: allData } = await supabase
         .from('fact_shipment')
         .select('shipment_date, product_code, product_name, shipped_qty, customer_name')
         .eq('factory', factory)
         .order('shipment_date')
+        .range(0, 9999)
 
       setShipments(allData || [])
 
-      // Fetch price map from dim_erp_item
+      // Fetch price map from dim_erp_item (use range to bypass 1000 row default limit)
       const { data: priceData } = await supabase
         .from('dim_erp_item')
         .select('item_code, sales_price')
+        .range(0, 9999)
 
       const pm: PriceMap = {}
       for (const p of priceData || []) {

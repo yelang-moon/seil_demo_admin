@@ -69,6 +69,7 @@ export default function ErpItemsPage() {
         .from('dim_erp_item')
         .select('*')
         .order('item_code')
+        .range(0, 9999)
 
       if (error) throw error
       setItems(data || [])

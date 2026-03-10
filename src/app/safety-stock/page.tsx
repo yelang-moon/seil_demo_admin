@@ -261,13 +261,15 @@ export default function SafetyStockPage() {
           .select('product_code, shipment_date, shipped_qty')
           .eq('factory', factory)
           .gte('shipment_date', d30str)
-          .order('shipment_date'),
+          .order('shipment_date')
+          .range(0, 9999),
         supabase
           .from('fact_shipment')
           .select('product_code, shipped_qty')
           .eq('factory', factory)
           .gte('shipment_date', d180str)
-          .lt('shipment_date', d30str),
+          .lt('shipment_date', d30str)
+          .range(0, 9999),
       ])
 
       if (shipsRes30.error) throw shipsRes30.error

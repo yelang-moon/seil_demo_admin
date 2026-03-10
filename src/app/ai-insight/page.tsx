@@ -166,6 +166,7 @@ export default function AIInsightPage() {
         .gte('shipment_date', startDate)
         .lte('shipment_date', endDate)
         .order('shipment_date', { ascending: false })
+        .range(0, 9999)
 
       if (error) throw error
       if (!data || data.length === 0) return null
