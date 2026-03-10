@@ -16,6 +16,9 @@ import {
   ChevronRight,
   ShieldAlert,
   Truck,
+  Monitor,
+  BarChart3,
+  MessageCircle,
 } from "lucide-react"
 import { useState } from "react"
 import { useFactory, FactoryType } from "@/contexts/factory-context"
@@ -33,11 +36,20 @@ const navItems: NavItem[] = [
     icon: <LayoutDashboard className="h-4 w-4" />,
     children: [
       { label: "메인 대시보드", href: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
+      { label: "공장 현황판", href: "/factory-monitor", icon: <Monitor className="h-4 w-4" /> },
       { label: "일보 (일일보고)", href: "/daily-report", icon: <FileText className="h-4 w-4" /> },
       { label: "생산보고", href: "/production-report", icon: <ClipboardList className="h-4 w-4" /> },
       { label: "안전 재고 대시보드", href: "/safety-stock", icon: <ShieldAlert className="h-4 w-4" /> },
       { label: "출하량 대시보드", href: "/shipment-dashboard", icon: <Truck className="h-4 w-4" /> },
+      { label: "채널 분석", href: "/channel-analysis", icon: <BarChart3 className="h-4 w-4" /> },
+    ],
+  },
+  {
+    label: "AI",
+    icon: <Bot className="h-4 w-4" />,
+    children: [
       { label: "AI 인사이트", href: "/ai-insight", icon: <Bot className="h-4 w-4" /> },
+      { label: "AI 챗봇", href: "/ai-chat", icon: <MessageCircle className="h-4 w-4" /> },
     ],
   },
   {
@@ -63,6 +75,7 @@ export function Sidebar() {
   const { factory, setFactory } = useFactory()
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     "대시보드": true,
+    "AI": true,
     "데이터 관리": true,
   })
 
