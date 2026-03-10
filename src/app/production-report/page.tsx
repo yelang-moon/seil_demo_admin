@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { formatNumber, formatPercent } from "@/lib/utils"
 import { cn } from "@/lib/utils"
+import { useFactory } from "@/contexts/factory-context"
 
 interface ProductionRow {
   equipment_name: string | null
@@ -41,6 +42,7 @@ interface ReportData {
 }
 
 export default function ProductionReport() {
+  const { factory } = useFactory()
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -53,6 +55,7 @@ export default function ProductionReport() {
         const { data } = await supabase
           .from("fact_production")
           .select("production_date")
+          .eq("factory", factory)
           .order("production_date", { ascending: false })
           .limit(1)
 
@@ -60,13 +63,17 @@ export default function ProductionReport() {
           const latest = data[0].production_date
           setLatestDate(latest)
           setSelectedDate(latest)
+        } else {
+          setLatestDate("")
+          setSelectedDate("")
+          setReportData(null)
         }
       } catch (error) {
         console.error("Error fetching latest date:", error)
       }
     }
     fetchLatestDate()
-  }, [])
+  }, [factory])
 
   // Fetch report data
   useEffect(() => {
@@ -79,6 +86,7 @@ export default function ProductionReport() {
         const { data: allEquipment } = await supabase
           .from("dim_equipment")
           .select("*")
+          .eq("factory", factory)
           .order("equipment_id")
 
         if (!allEquipment) return
@@ -88,11 +96,13 @@ export default function ProductionReport() {
           .from("fact_production")
           .select("*")
           .eq("production_date", selectedDate)
+          .eq("factory", factory)
 
         // Get product specs
         const { data: productSpecs } = await supabase
           .from("dim_product")
           .select("equipment_name, daily_max_qty")
+          .eq("factory", factory)
 
         // Create a map of production data
         const productionByEquip = new Map()
@@ -181,7 +191,7 @@ export default function ProductionReport() {
     }
 
     fetchReportData()
-  }, [selectedDate])
+  }, [selectedDate, factory])
 
   const downloadCSV = () => {
     if (!reportData) return

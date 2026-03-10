@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { useFactory } from "@/contexts/factory-context"
 
 type PeriodType = "1month" | "3months" | "6months"
 
@@ -60,6 +61,7 @@ interface MonthlyData {
 }
 
 export default function Dashboard() {
+  const { factory } = useFactory()
   const [period, setPeriod] = useState<PeriodType>("1month")
   const [latestDate, setLatestDate] = useState<string>("")
   const [kpiData, setKpiData] = useState({
@@ -95,13 +97,15 @@ export default function Dashboard() {
     }
   }
 
-  // Fetch the latest date with data on mount
+  // Fetch the latest date with data on mount or factory change
   useEffect(() => {
     const fetchLatestDate = async () => {
+      setLatestDate("")
       try {
         const { data } = await supabase
           .from("fact_production")
           .select("production_date")
+          .eq("factory", factory)
           .order("production_date", { ascending: false })
           .limit(1)
         if (data && data.length > 0) {
@@ -112,7 +116,7 @@ export default function Dashboard() {
       }
     }
     fetchLatestDate()
-  }, [])
+  }, [factory])
 
   // Fetch KPI data (independent of period, always based on latestDate)
   const fetchKPIData = useCallback(async () => {
@@ -129,11 +133,13 @@ export default function Dashboard() {
         .from("fact_production")
         .select("finished_qty, equipment_name")
         .eq("production_date", latestDate)
+        .eq("factory", factory)
 
       // Fetch current month data
       const { data: currentMonthData } = await supabase
         .from("fact_production")
         .select("finished_qty, produced_qty, defect_qty")
+        .eq("factory", factory)
         .gte("production_date", currentMonth + "-01")
         .lte("production_date", latestDate)
 
@@ -148,6 +154,7 @@ export default function Dashboard() {
       const { data: prevMonthData } = await supabase
         .from("fact_production")
         .select("finished_qty")
+        .eq("factory", factory)
         .gte("production_date", prevMonthStart)
         .lte("production_date", prevMonthEnd)
 
@@ -195,7 +202,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error fetching KPI data:", error)
     }
-  }, [latestDate])
+  }, [latestDate, factory])
 
   // Fetch chart data (depends on period)
   const fetchChartData = useCallback(async () => {
@@ -211,6 +218,7 @@ export default function Dashboard() {
       const { data: productionData } = await supabase
         .from("fact_production")
         .select("*")
+        .eq("factory", factory)
         .gte("production_date", startDate)
         .lte("production_date", endDate)
         .order("production_date", { ascending: true })
@@ -279,6 +287,7 @@ export default function Dashboard() {
       const { data: productDims } = await supabase
         .from("dim_product")
         .select("equipment_name, daily_max_qty")
+        .eq("factory", factory)
 
       const utilMap = new Map<string, { actual: number }>()
       thisMonthData.forEach((row) => {
@@ -326,7 +335,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [latestDate, period])
+  }, [latestDate, period, factory])
 
   useEffect(() => {
     if (latestDate) {

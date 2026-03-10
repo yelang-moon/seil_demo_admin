@@ -26,6 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { formatNumber } from '@/lib/utils'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useFactory } from '@/contexts/factory-context'
 
 const columns: Column<Product>[] = [
   { key: 'product_code', label: '제품코드', sortable: true, searchable: true },
@@ -40,6 +41,7 @@ const columns: Column<Product>[] = [
 interface FormData extends Partial<Product> {}
 
 export default function ProductsPage() {
+  const { factory } = useFactory()
   const [products, setProducts] = useState<Product[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,14 +52,14 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [factory])
 
   const fetchData = async () => {
     setLoading(true)
     try {
       const [productsRes, equipmentRes] = await Promise.all([
-        supabase.from('dim_product').select('*').order('id'),
-        supabase.from('dim_equipment').select('equipment_id, name_official, name_legacy').order('equipment_id') as any,
+        supabase.from('dim_product').select('*').eq('factory', factory).order('id'),
+        supabase.from('dim_equipment').select('equipment_id, name_official, name_legacy').eq('factory', factory).order('equipment_id') as any,
       ])
 
       if (productsRes.error) throw productsRes.error
@@ -75,7 +77,7 @@ export default function ProductsPage() {
 
   const handleNew = () => {
     setEditingItem(null)
-    setFormData({ product_code: '' })
+    setFormData({ product_code: '', factory })
     setDialogOpen(true)
   }
 

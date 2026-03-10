@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { useFactory } from '@/contexts/factory-context'
 
 const columns: Column<Equipment>[] = [
   { key: 'equipment_id', label: '설비ID', sortable: true, searchable: true },
@@ -29,6 +30,7 @@ const columns: Column<Equipment>[] = [
 interface FormData extends Partial<Equipment> {}
 
 export default function EquipmentPage() {
+  const { factory } = useFactory()
   const [equipment, setEquipment] = useState<Equipment[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -37,7 +39,7 @@ export default function EquipmentPage() {
 
   useEffect(() => {
     fetchEquipment()
-  }, [])
+  }, [factory])
 
   const fetchEquipment = async () => {
     setLoading(true)
@@ -45,6 +47,7 @@ export default function EquipmentPage() {
       const { data, error } = await supabase
         .from('dim_equipment')
         .select('*')
+        .eq('factory', factory)
         .order('equipment_id', { ascending: true })
 
       if (error) throw error
@@ -64,7 +67,7 @@ export default function EquipmentPage() {
 
   const handleNew = () => {
     setEditingItem(null)
-    setFormData({ equipment_id: getNextEquipmentId() })
+    setFormData({ equipment_id: getNextEquipmentId(), factory })
     setDialogOpen(true)
   }
 

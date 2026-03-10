@@ -7,10 +7,12 @@ import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase'
 import { Production } from '@/types/database'
+import { useFactory } from '@/contexts/factory-context'
 
 type Period = '1month' | '3months' | '6months'
 
 export default function AIInsightPage() {
+  const { factory } = useFactory()
   const [period, setPeriod] = useState<Period>('1month')
   const [markdown, setMarkdown] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,7 +29,7 @@ export default function AIInsightPage() {
     }
   }
 
-  const getCacheKey = (p: Period) => `ai-insight-${p}`
+  const getCacheKey = (p: Period) => `ai-insight-${factory}-${p}`
 
   // Check cache on mount and period change
   useEffect(() => {
@@ -55,13 +57,14 @@ export default function AIInsightPage() {
       }
     }
     checkCache()
-  }, [period])
+  }, [period, factory])
 
   const fetchProductionData = async () => {
     try {
       const { data: latestRow } = await supabase
         .from('fact_production')
         .select('production_date')
+        .eq('factory', factory)
         .order('production_date', { ascending: false })
         .limit(1)
 
@@ -76,6 +79,7 @@ export default function AIInsightPage() {
       const { data, error } = await supabase
         .from('fact_production')
         .select('*')
+        .eq('factory', factory)
         .gte('production_date', startDateStr)
         .lte('production_date', latestDate)
         .order('production_date', { ascending: false })

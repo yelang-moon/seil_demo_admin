@@ -16,6 +16,7 @@ import {
   Database,
 } from "lucide-react"
 import { useState } from "react"
+import { useFactory, FactoryType } from "@/contexts/factory-context"
 
 const allLinks = [
   { label: "메인 대시보드", href: "/", icon: <LayoutDashboard className="h-4 w-4" />, group: "대시보드" },
@@ -28,8 +29,14 @@ const allLinks = [
   { label: "생산기록", href: "/admin/production", icon: <ClipboardList className="h-4 w-4" />, group: "데이터 관리" },
 ]
 
+const factories: { value: FactoryType; label: string; color: string }[] = [
+  { value: "지기생산부", label: "지기생산부", color: "bg-blue-500" },
+  { value: "성형부", label: "성형부", color: "bg-emerald-500" },
+]
+
 export function MobileNav() {
   const pathname = usePathname()
+  const { factory, setFactory } = useFactory()
   const [open, setOpen] = useState(false)
 
   const groups = Array.from(new Set(allLinks.map((l) => l.group)))
@@ -51,6 +58,28 @@ export function MobileNav() {
               <span className="font-bold text-gray-900">SEIL</span>
             </div>
           </div>
+
+          {/* Factory Selector */}
+          <div className="px-3 py-3 border-b border-gray-200">
+            <div className="bg-gray-100 p-1 rounded-lg flex">
+              {factories.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setFactory(f.value)}
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all",
+                    factory === f.value
+                      ? "bg-white shadow-sm text-gray-900"
+                      : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  <span className={cn("w-2 h-2 rounded-full", f.color)} />
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <nav className="py-4 px-3">
             {groups.map((group) => (
               <div key={group} className="mb-4">

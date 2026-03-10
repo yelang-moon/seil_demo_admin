@@ -6,6 +6,7 @@ export interface Equipment {
   note: string | null
   manufacturer: string | null
   country: string | null
+  factory: string | null
 }
 
 export interface Product {
@@ -17,6 +18,7 @@ export interface Product {
   equipment_name: string | null
   raw_material: string | null
   daily_max_qty: number | null
+  factory: string | null
 }
 
 export interface ErpItem {
@@ -53,4 +55,5 @@ export interface Production {
   work_start_hhmm: string | null
   work_end_hhmm: string | null
   work_minutes: number | null
+  factory: string | null
 }

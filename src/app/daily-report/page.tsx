@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase"
 import { EquipmentCard } from "@/components/dashboard/equipment-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatNumber } from "@/lib/utils"
+import { useFactory } from "@/contexts/factory-context"
 
 interface DailyReportData {
   selected_date: string
@@ -32,6 +33,7 @@ interface DailyReportData {
 }
 
 export default function DailyReport() {
+  const { factory } = useFactory()
   const [selectedDate, setSelectedDate] = useState<string>("")
   const [reportData, setReportData] = useState<DailyReportData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -44,6 +46,7 @@ export default function DailyReport() {
         const { data } = await supabase
           .from("fact_production")
           .select("production_date")
+          .eq("factory", factory)
           .order("production_date", { ascending: false })
           .limit(1)
 
@@ -51,13 +54,17 @@ export default function DailyReport() {
           const latest = data[0].production_date
           setLatestDate(latest)
           setSelectedDate(latest)
+        } else {
+          setLatestDate("")
+          setSelectedDate("")
+          setReportData(null)
         }
       } catch (error) {
         console.error("Error fetching latest date:", error)
       }
     }
     fetchLatestDate()
-  }, [])
+  }, [factory])
 
   // Fetch report data when date changes
   useEffect(() => {
@@ -70,6 +77,7 @@ export default function DailyReport() {
         const { data: allEquipment } = await supabase
           .from("dim_equipment")
           .select("*")
+          .eq("factory", factory)
           .order("equipment_id")
 
         if (!allEquipment) return
@@ -79,11 +87,13 @@ export default function DailyReport() {
           .from("fact_production")
           .select("*")
           .eq("production_date", selectedDate)
+          .eq("factory", factory)
 
         // Get product specs
         const { data: productSpecs } = await supabase
           .from("dim_product")
           .select("equipment_name, daily_max_qty")
+          .eq("factory", factory)
 
         // Map production data by equipment
         const productionByEquip = new Map()
@@ -162,7 +172,7 @@ export default function DailyReport() {
     }
 
     fetchReportData()
-  }, [selectedDate])
+  }, [selectedDate, factory])
 
   return (
     <div className="space-y-6">

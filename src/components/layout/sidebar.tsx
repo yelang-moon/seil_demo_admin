@@ -16,6 +16,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { useState } from "react"
+import { useFactory, FactoryType } from "@/contexts/factory-context"
 
 interface NavItem {
   label: string
@@ -47,8 +48,14 @@ const navItems: NavItem[] = [
   },
 ]
 
+const factories: { value: FactoryType; label: string; color: string }[] = [
+  { value: "지기생산부", label: "지기생산부", color: "bg-blue-500" },
+  { value: "성형부", label: "성형부", color: "bg-emerald-500" },
+]
+
 export function Sidebar() {
   const pathname = usePathname()
+  const { factory, setFactory } = useFactory()
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     "대시보드": true,
     "데이터 관리": true,
@@ -71,6 +78,27 @@ export function Sidebar() {
             <p className="text-[10px] text-gray-500 -mt-1">생산관리 시스템</p>
           </div>
         </Link>
+      </div>
+
+      {/* Factory Selector */}
+      <div className="px-3 py-3 border-b border-gray-200">
+        <div className="bg-gray-100 p-1 rounded-lg flex">
+          {factories.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFactory(f.value)}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-xs font-medium transition-all",
+                factory === f.value
+                  ? "bg-white shadow-sm text-gray-900"
+                  : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              <span className={cn("w-2 h-2 rounded-full", f.color)} />
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Navigation */}

@@ -19,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { formatNumber, formatDate } from '@/lib/utils'
 import { Check, ChevronsUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useFactory } from '@/contexts/factory-context'
 
 const columns: Column<Production>[] = [
   { key: 'production_date', label: '생산일', sortable: true, format: (v) => formatDate(v || '') },
@@ -34,6 +35,7 @@ const columns: Column<Production>[] = [
 interface FormData extends Partial<Production> {}
 
 export default function ProductionPage() {
+  const { factory } = useFactory()
   const [productions, setProductions] = useState<Production[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [equipment, setEquipment] = useState<Equipment[]>([])
@@ -46,15 +48,15 @@ export default function ProductionPage() {
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [factory])
 
   const fetchData = async () => {
     setLoading(true)
     try {
       const [productionsRes, productsRes, equipmentRes] = await Promise.all([
-        supabase.from('fact_production').select('*').order('production_date', { ascending: false }),
-        supabase.from('dim_product').select('*').order('product_code'),
-        supabase.from('dim_equipment').select('equipment_id, name_official, name_legacy').order('equipment_id') as any,
+        supabase.from('fact_production').select('*').eq('factory', factory).order('production_date', { ascending: false }),
+        supabase.from('dim_product').select('*').eq('factory', factory).order('product_code'),
+        supabase.from('dim_equipment').select('equipment_id, name_official, name_legacy').eq('factory', factory).order('equipment_id') as any,
       ])
 
       if (productionsRes.error) throw productionsRes.error
@@ -102,6 +104,7 @@ export default function ProductionPage() {
       production_date: today,
       production_type: '생산',
       year_month: getYearMonth(today),
+      factory,
     })
     setDialogOpen(true)
   }

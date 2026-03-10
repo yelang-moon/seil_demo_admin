@@ -23,7 +23,8 @@ CREATE TABLE dim_equipment (
   name_short TEXT,
   note TEXT,
   manufacturer TEXT,
-  country TEXT
+  country TEXT,
+  factory TEXT DEFAULT '지기생산부'
 );
 
 -- ============================================
@@ -38,7 +39,8 @@ CREATE TABLE dim_product (
   rpm INTEGER,
   equipment_name TEXT,
   raw_material TEXT,
-  daily_max_qty INTEGER
+  daily_max_qty INTEGER,
+  factory TEXT DEFAULT '지기생산부'
 );
 
 -- ============================================
@@ -80,7 +82,8 @@ CREATE TABLE fact_production (
   worker_count INTEGER,
   work_start_hhmm TEXT,
   work_end_hhmm TEXT,
-  work_minutes INTEGER
+  work_minutes INTEGER,
+  factory TEXT DEFAULT '지기생산부'
 );
 
 -- ============================================
@@ -136,6 +139,9 @@ CREATE INDEX idx_fact_production_equipment ON fact_production(equipment_name);
 CREATE INDEX idx_fact_production_year_month ON fact_production(year_month);
 CREATE INDEX idx_dim_product_equipment ON dim_product(equipment_name);
 CREATE INDEX idx_dim_product_code ON dim_product(product_code);
+CREATE INDEX idx_fact_production_factory ON fact_production(factory);
+CREATE INDEX idx_dim_equipment_factory ON dim_equipment(factory);
+CREATE INDEX idx_dim_product_factory ON dim_product(factory);
 
 -- ============================================
 -- 완료!
