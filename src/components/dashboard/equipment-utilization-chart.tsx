@@ -29,6 +29,7 @@ interface EquipmentUtilizationChartProps {
   }[]
   dailyData?: Array<{ date: string; equipment_name: string; finished_qty: number }>
   equipCapacities?: Record<string, number>
+  workingDays?: string[]
 }
 
 function GaugeChart({
@@ -118,6 +119,7 @@ export function EquipmentUtilizationChart({
   data,
   dailyData,
   equipCapacities,
+  workingDays,
 }: EquipmentUtilizationChartProps) {
   const [popupOpen, setPopupOpen] = useState(false)
   const [selectedEquip, setSelectedEquip] = useState<string | null>(null)
@@ -143,6 +145,7 @@ export function EquipmentUtilizationChart({
     const capacity = equipCapacities[selectedEquip] || 0
     if (capacity === 0) return []
 
+    // Build a map of equipment's daily production
     const dailyMap = new Map<string, number>()
     dailyData
       .filter(d => d.equipment_name === selectedEquip)
@@ -150,13 +153,17 @@ export function EquipmentUtilizationChart({
         dailyMap.set(d.date, (dailyMap.get(d.date) || 0) + d.finished_qty)
       })
 
-    return Array.from(dailyMap.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([date, qty]) => ({
-        date: date.slice(5),
-        rate: Math.round((qty / capacity) * 100 * 10) / 10,
-      }))
-  }, [selectedEquip, dailyData, equipCapacities])
+    // Use ALL working days (from fact_production), not just days this equipment ran
+    const days = workingDays && workingDays.length > 0
+      ? workingDays
+      : Array.from(dailyMap.keys()).sort()
+
+    return days.map(date => ({
+      date: date.slice(5),
+      fullDate: date,
+      rate: Math.round(((dailyMap.get(date) || 0) / capacity) * 100 * 10) / 10,
+    }))
+  }, [selectedEquip, dailyData, equipCapacities, workingDays])
 
   return (
     <>
@@ -224,7 +231,10 @@ export function EquipmentUtilizationChart({
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                     <YAxis domain={[0, 'auto']} tickFormatter={(v) => `${v}%`} />
-                    <Tooltip formatter={(value) => [`${value}%`, "가동률"]} />
+                    <Tooltip
+                      formatter={(value) => [`${value}%`, "가동률"]}
+                      labelFormatter={(label) => `날짜: ${label}`}
+                    />
                     <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="3 3" label="100%" />
                     <Line type="monotone" dataKey="rate" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} />
                   </LineChart>

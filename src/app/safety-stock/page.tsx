@@ -535,88 +535,88 @@ export default function SafetyStockPage() {
       </div>
 
       {/* KPI Cards - Urgency level counts */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
         <Card
-          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'all' && "ring-2 ring-blue-400")}
+          className={cn("cursor-pointer hover:shadow-lg transition-all", urgencyFilter === 'all' ? "ring-2 ring-blue-400 shadow-md" : "")}
           onClick={() => setUrgencyFilter('all')}
         >
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2">
-              <Package className="h-4 w-4 text-blue-600" />
-              <div>
-                <p className="text-xs text-gray-500">전체</p>
-                <p className="text-xl font-bold">{analyses.length}</p>
+          <CardContent className="pt-5 pb-5">
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="p-2.5 bg-blue-100 rounded-full">
+                <Package className="h-5 w-5 text-blue-600" />
               </div>
+              <p className="text-xs font-medium text-gray-500">전체</p>
+              <p className="text-2xl font-bold">{analyses.length}</p>
             </div>
           </CardContent>
         </Card>
         <Card
-          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'critical' && "ring-2 ring-red-400")}
+          className={cn("cursor-pointer hover:shadow-lg transition-all", urgencyFilter === 'critical' ? "ring-2 ring-red-400 shadow-md" : "")}
           onClick={() => setUrgencyFilter('critical')}
         >
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500" />
-              <div>
-                <p className="text-xs text-gray-500">긴급</p>
-                <p className="text-xl font-bold text-red-600">{urgencyCounts.critical}</p>
+          <CardContent className="pt-5 pb-5">
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="p-2.5 bg-red-100 rounded-full">
+                <div className="w-3 h-3 rounded-full bg-red-500" />
               </div>
+              <p className="text-xs font-medium text-gray-500">긴급</p>
+              <p className="text-2xl font-bold text-red-600">{urgencyCounts.critical}</p>
             </div>
           </CardContent>
         </Card>
         <Card
-          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'high' && "ring-2 ring-orange-400")}
+          className={cn("cursor-pointer hover:shadow-lg transition-all", urgencyFilter === 'high' ? "ring-2 ring-orange-400 shadow-md" : "")}
           onClick={() => setUrgencyFilter('high')}
         >
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-orange-500" />
-              <div>
-                <p className="text-xs text-gray-500">우선</p>
-                <p className="text-xl font-bold text-orange-600">{urgencyCounts.high}</p>
+          <CardContent className="pt-5 pb-5">
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="p-2.5 bg-orange-100 rounded-full">
+                <div className="w-3 h-3 rounded-full bg-orange-500" />
               </div>
+              <p className="text-xs font-medium text-gray-500">우선</p>
+              <p className="text-2xl font-bold text-orange-600">{urgencyCounts.high}</p>
             </div>
           </CardContent>
         </Card>
         <Card
-          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'medium' && "ring-2 ring-yellow-400")}
+          className={cn("cursor-pointer hover:shadow-lg transition-all", urgencyFilter === 'medium' ? "ring-2 ring-yellow-400 shadow-md" : "")}
           onClick={() => setUrgencyFilter('medium')}
         >
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-yellow-500" />
-              <div>
-                <p className="text-xs text-gray-500">주의</p>
-                <p className="text-xl font-bold text-yellow-600">{urgencyCounts.medium}</p>
+          <CardContent className="pt-5 pb-5">
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="p-2.5 bg-yellow-100 rounded-full">
+                <div className="w-3 h-3 rounded-full bg-yellow-500" />
               </div>
+              <p className="text-xs font-medium text-gray-500">주의</p>
+              <p className="text-2xl font-bold text-yellow-600">{urgencyCounts.medium}</p>
             </div>
           </CardContent>
         </Card>
         <Card
-          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'low' && "ring-2 ring-green-400")}
+          className={cn("cursor-pointer hover:shadow-lg transition-all", urgencyFilter === 'low' ? "ring-2 ring-green-400 shadow-md" : "")}
           onClick={() => setUrgencyFilter('low')}
         >
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              <div>
-                <p className="text-xs text-gray-500">양호</p>
-                <p className="text-xl font-bold text-green-600">{urgencyCounts.low}</p>
+          <CardContent className="pt-5 pb-5">
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="p-2.5 bg-green-100 rounded-full">
+                <div className="w-3 h-3 rounded-full bg-green-500" />
               </div>
+              <p className="text-xs font-medium text-gray-500">양호</p>
+              <p className="text-2xl font-bold text-green-600">{urgencyCounts.low}</p>
             </div>
           </CardContent>
         </Card>
         <Card
-          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'discontinued' && "ring-2 ring-gray-400")}
+          className={cn("cursor-pointer hover:shadow-lg transition-all", urgencyFilter === 'discontinued' ? "ring-2 ring-gray-400 shadow-md" : "")}
           onClick={() => setUrgencyFilter('discontinued')}
         >
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2">
-              <Ban className="h-4 w-4 text-gray-400" />
-              <div>
-                <p className="text-xs text-gray-500">판매중단</p>
-                <p className="text-xl font-bold text-gray-400">{urgencyCounts.discontinued}</p>
+          <CardContent className="pt-5 pb-5">
+            <div className="flex flex-col items-center text-center gap-2">
+              <div className="p-2.5 bg-gray-100 rounded-full">
+                <Ban className="h-5 w-5 text-gray-400" />
               </div>
+              <p className="text-xs font-medium text-gray-500">판매중단</p>
+              <p className="text-2xl font-bold text-gray-400">{urgencyCounts.discontinued}</p>
             </div>
           </CardContent>
         </Card>

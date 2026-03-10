@@ -137,6 +137,7 @@ export default function Dashboard() {
   const [dailyProductionRaw, setDailyProductionRaw] = useState<DailyProductionData[]>([])
   const [equipCapacities, setEquipCapacities] = useState<Record<string, number>>({})
   const [equipNameMap, setEquipNameMap] = useState<Record<string, string>>({})
+  const [workingDays, setWorkingDays] = useState<string[]>([])
 
   const applyPreset = (preset: PresetType, baseDate: string) => {
     if (preset === "custom") return
@@ -521,8 +522,16 @@ export default function Dashboard() {
       })
       setEquipCapacities(capacitiesMap)
 
-      // Equipment utilization: totalActual / (daily_max_qty * weekdays only)
-      const periodDays = getWeekdayCount(startDate, endDate)
+      // Working days = DISTINCT production_date from fact_production in this period
+      const workingDaysSet = new Set<string>()
+      productionData.forEach((row) => {
+        if (row.production_date) workingDaysSet.add(row.production_date)
+      })
+      const workingDaysList = Array.from(workingDaysSet).sort()
+      setWorkingDays(workingDaysList)
+      const periodDays = Math.max(1, workingDaysList.length)
+
+      // Equipment utilization: totalActual / (daily_max_qty * working days)
       const utilMap = new Map<string, { actual: number }>()
       productionData.forEach((row) => {
         const equipName = mapName(row.equipment_name) || "미지정"
@@ -533,7 +542,7 @@ export default function Dashboard() {
       const utilData: EquipmentUtil[] = []
       utilMap.forEach((value, equipName) => {
         const maxQty = productDims?.find((p) => (mapName(p.equipment_name) || p.equipment_name) === equipName)?.daily_max_qty || 0
-        // capacity = daily_max_qty * period days
+        // capacity = daily_max_qty * working days (from fact_production)
         const totalCapacity = maxQty * periodDays
         utilData.push({ equipment_name: equipName, actual: value.actual, capacity: totalCapacity })
       })
@@ -632,7 +641,7 @@ export default function Dashboard() {
             <DailyTrendChart data={dailyTrendData as any} />
             <EquipmentProductionChart data={equipmentProductionData as any} />
             <ProductMixChart data={productMixData as any} />
-            <EquipmentUtilizationChart data={equipmentUtilData as any} dailyData={dailyProductionRaw} equipCapacities={equipCapacities} />
+            <EquipmentUtilizationChart data={equipmentUtilData as any} dailyData={dailyProductionRaw} equipCapacities={equipCapacities} workingDays={workingDays} />
           </div>
 
           <div className="mt-6">
