@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useFactory } from '@/contexts/factory-context'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -24,9 +24,9 @@ import {
   Search,
   ChevronUp,
   ChevronDown,
+  Filter,
 } from 'lucide-react'
 import {
-  BarChart,
   Bar,
   XAxis,
   YAxis,
@@ -34,9 +34,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Line,
   ComposedChart,
-  Area,
 } from 'recharts'
 
 // ====== Types ======
@@ -56,17 +54,25 @@ interface ShipmentDay {
   qty: number
 }
 
+interface ShipmentRecord {
+  shipment_date: string
+  shipped_qty: number
+  customer_name: string
+  order_number: string | null
+}
+
 interface ProductAnalysis {
   product: ProductStock
-  stockRatio: number // current / safety * 100
+  stockRatio: number
   shipments7d: number
   shipments30d: number
+  shipments180d: number
   avgDaily7d: number
   avgDaily30d: number
-  daysRemaining: number // current / avgDaily7d
+  daysRemaining: number
   urgency: 'critical' | 'high' | 'medium' | 'low'
   urgencyLabel: string
-  trend: 'up' | 'down' | 'stable' // 7d avg vs 30d avg
+  trend: 'up' | 'down' | 'stable'
 }
 
 // ====== Urgency calculation ======
@@ -78,19 +84,15 @@ function calcUrgency(
   currentStock: number,
   safetyStock: number
 ): { urgency: ProductAnalysis['urgency']; label: string } {
-  // Dead stock case: very high stock with no shipments
   if (stockRatio > 250 && !hasRecentShipment) {
     return { urgency: 'medium', label: '악성재고 의심' }
   }
-
   if (hasRecentShipment && avgDaily7d > 0) {
     if (daysRemaining < 3) return { urgency: 'critical', label: '긴급 생산 필요' }
     if (daysRemaining < 7) return { urgency: 'high', label: '생산 우선' }
     if (daysRemaining < 14 || stockRatio < 100) return { urgency: 'medium', label: '주의' }
     return { urgency: 'low', label: '양호' }
   }
-
-  // No recent shipments
   if (stockRatio < 50) return { urgency: 'medium', label: '재고 부족' }
   if (stockRatio > 200) return { urgency: 'low', label: '과잉 재고' }
   return { urgency: 'low', label: '양호' }
@@ -110,26 +112,57 @@ const URGENCY_DOT: Record<string, string> = {
   low: 'bg-green-500',
 }
 
-type SortKey = 'urgency' | 'stockRatio' | 'daysRemaining' | 'shipments7d' | 'product_name'
+const URGENCY_FILTER_OPTIONS: { key: ProductAnalysis['urgency']; label: string; color: string }[] = [
+  { key: 'critical', label: '긴급', color: 'bg-red-500' },
+  { key: 'high', label: '우선', color: 'bg-orange-500' },
+  { key: 'medium', label: '주의', color: 'bg-yellow-500' },
+  { key: 'low', label: '양호', color: 'bg-green-500' },
+]
+
+const DAYS_FILTER_OPTIONS = [
+  { label: '전체', min: 0, max: Infinity },
+  { label: '3일 이내', min: 0, max: 3 },
+  { label: '7일 이내', min: 0, max: 7 },
+  { label: '14일 이내', min: 0, max: 14 },
+  { label: '30일 이내', min: 0, max: 30 },
+  { label: '30일 이상', min: 30, max: Infinity },
+]
+
+type SortKey = 'urgency' | 'stockRatio' | 'daysRemaining' | 'shipments7d' | 'shipments30d' | 'shipments180d' | 'product_name' | 'equipment_name'
 type SortDir = 'asc' | 'desc'
 
 export default function SafetyStockPage() {
   const { factory } = useFactory()
   const [products, setProducts] = useState<ProductStock[]>([])
   const [shipmentMap, setShipmentMap] = useState<Record<string, ShipmentDay[]>>({})
+  const [shipment180Map, setShipment180Map] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('urgency')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selectedProduct, setSelectedProduct] = useState<ProductAnalysis | null>(null)
   const [detailShipments, setDetailShipments] = useState<ShipmentDay[]>([])
+  const [detailRecords, setDetailRecords] = useState<ShipmentRecord[]>([])
   const [detailOpen, setDetailOpen] = useState(false)
+
+  // Filters
+  const [urgencyFilter, setUrgencyFilter] = useState<Set<ProductAnalysis['urgency']>>(new Set())
+  const [daysFilter, setDaysFilter] = useState(0) // index into DAYS_FILTER_OPTIONS
+  const [showFilters, setShowFilters] = useState(false)
+
+  const toggleUrgencyFilter = (u: ProductAnalysis['urgency']) => {
+    setUrgencyFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(u)) next.delete(u)
+      else next.add(u)
+      return next
+    })
+  }
 
   // Fetch all data
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      // Get products with safety stock
       const { data: prods, error: prodErr } = await supabase
         .from('dim_product')
         .select('id, product_code, product_name, equipment_name, daily_max_qty, safety_stock_qty, current_stock_qty, factory')
@@ -139,27 +172,41 @@ export default function SafetyStockPage() {
 
       if (prodErr) throw prodErr
 
-      // Get shipments for last 30 days
       const today = new Date()
+
+      // 30-day shipments (for daily analysis)
       const d30ago = new Date(today)
       d30ago.setDate(d30ago.getDate() - 30)
       const d30str = `${d30ago.getFullYear()}-${String(d30ago.getMonth() + 1).padStart(2, '0')}-${String(d30ago.getDate()).padStart(2, '0')}`
 
-      const { data: ships, error: shipErr } = await supabase
-        .from('fact_shipment')
-        .select('product_code, shipment_date, shipped_qty')
-        .eq('factory', factory)
-        .gte('shipment_date', d30str)
-        .order('shipment_date')
+      // 180-day shipments (for 6-month totals)
+      const d180ago = new Date(today)
+      d180ago.setDate(d180ago.getDate() - 180)
+      const d180str = `${d180ago.getFullYear()}-${String(d180ago.getMonth() + 1).padStart(2, '0')}-${String(d180ago.getDate()).padStart(2, '0')}`
 
-      if (shipErr) throw shipErr
+      const [shipsRes30, shipsRes180] = await Promise.all([
+        supabase
+          .from('fact_shipment')
+          .select('product_code, shipment_date, shipped_qty')
+          .eq('factory', factory)
+          .gte('shipment_date', d30str)
+          .order('shipment_date'),
+        supabase
+          .from('fact_shipment')
+          .select('product_code, shipped_qty')
+          .eq('factory', factory)
+          .gte('shipment_date', d180str)
+          .lt('shipment_date', d30str),
+      ])
 
-      // Build shipment map by product_code
+      if (shipsRes30.error) throw shipsRes30.error
+      if (shipsRes180.error) throw shipsRes180.error
+
+      // Build 30-day shipment map by product_code
       const sMap: Record<string, ShipmentDay[]> = {}
-      for (const s of (ships || [])) {
+      for (const s of (shipsRes30.data || [])) {
         const code = s.product_code || ''
         if (!sMap[code]) sMap[code] = []
-        // Aggregate by date
         const existing = sMap[code].find(d => d.date === s.shipment_date)
         if (existing) {
           existing.qty += (s.shipped_qty || 0)
@@ -168,8 +215,21 @@ export default function SafetyStockPage() {
         }
       }
 
+      // Build 180-day totals (only the 150 days before the 30-day window)
+      const s180Map: Record<string, number> = {}
+      for (const s of (shipsRes180.data || [])) {
+        const code = s.product_code || ''
+        s180Map[code] = (s180Map[code] || 0) + (s.shipped_qty || 0)
+      }
+      // Add 30-day data to get full 180-day total
+      for (const code of Object.keys(sMap)) {
+        const total30 = sMap[code].reduce((sum, d) => sum + d.qty, 0)
+        s180Map[code] = (s180Map[code] || 0) + total30
+      }
+
       setProducts(prods || [])
       setShipmentMap(sMap)
+      setShipment180Map(s180Map)
     } catch (err) {
       console.error('Failed to fetch data:', err)
     } finally {
@@ -194,6 +254,7 @@ export default function SafetyStockPage() {
 
       const total30d = shipDays.reduce((s, d) => s + d.qty, 0)
       const total7d = shipDays.filter(d => d.date >= d7str).reduce((s, d) => s + d.qty, 0)
+      const total180d = shipment180Map[code] || 0
 
       const avgDaily30d = total30d / 30
       const avgDaily7d = total7d / 7
@@ -216,6 +277,7 @@ export default function SafetyStockPage() {
         stockRatio,
         shipments7d: total7d,
         shipments30d: total30d,
+        shipments180d: total180d,
         avgDaily7d,
         avgDaily30d,
         daysRemaining: Math.min(daysRemaining, 999),
@@ -224,11 +286,13 @@ export default function SafetyStockPage() {
         trend,
       }
     })
-  }, [products, shipmentMap])
+  }, [products, shipmentMap, shipment180Map])
 
   // Filter and sort
   const displayed = useMemo(() => {
     let filtered = analyses
+
+    // Text search
     if (search) {
       const s = search.toLowerCase()
       filtered = filtered.filter(
@@ -237,6 +301,17 @@ export default function SafetyStockPage() {
           (a.product.product_code || '').toLowerCase().includes(s) ||
           (a.product.equipment_name || '').toLowerCase().includes(s)
       )
+    }
+
+    // Urgency filter
+    if (urgencyFilter.size > 0) {
+      filtered = filtered.filter(a => urgencyFilter.has(a.urgency))
+    }
+
+    // Days remaining filter
+    const df = DAYS_FILTER_OPTIONS[daysFilter]
+    if (df && (df.min > 0 || df.max < Infinity)) {
+      filtered = filtered.filter(a => a.daysRemaining >= df.min && a.daysRemaining < df.max)
     }
 
     filtered.sort((a, b) => {
@@ -254,15 +329,24 @@ export default function SafetyStockPage() {
         case 'shipments7d':
           cmp = a.shipments7d - b.shipments7d
           break
+        case 'shipments30d':
+          cmp = a.shipments30d - b.shipments30d
+          break
+        case 'shipments180d':
+          cmp = a.shipments180d - b.shipments180d
+          break
         case 'product_name':
           cmp = (a.product.product_name || '').localeCompare(b.product.product_name || '', 'ko')
+          break
+        case 'equipment_name':
+          cmp = (a.product.equipment_name || '').localeCompare(b.product.equipment_name || '', 'ko')
           break
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
 
     return filtered
-  }, [analyses, search, sortKey, sortDir])
+  }, [analyses, search, sortKey, sortDir, urgencyFilter, daysFilter])
 
   // KPI stats
   const stats = useMemo(() => {
@@ -273,7 +357,6 @@ export default function SafetyStockPage() {
     return { total, belowSafety, critical, deadStock }
   }, [analyses])
 
-  // Handle sort toggle
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -288,27 +371,26 @@ export default function SafetyStockPage() {
     setSelectedProduct(analysis)
     setDetailOpen(true)
 
-    // Fetch 90 days of shipment data for detail chart
     const today = new Date()
     const d90ago = new Date(today)
     d90ago.setDate(d90ago.getDate() - 90)
     const d90str = `${d90ago.getFullYear()}-${String(d90ago.getMonth() + 1).padStart(2, '0')}-${String(d90ago.getDate()).padStart(2, '0')}`
 
+    // Fetch detail shipment data (with customer info for table)
     const { data } = await supabase
       .from('fact_shipment')
-      .select('shipment_date, shipped_qty')
+      .select('shipment_date, shipped_qty, customer_name, order_number')
       .eq('factory', factory)
       .eq('product_code', analysis.product.product_code)
       .gte('shipment_date', d90str)
-      .order('shipment_date')
+      .order('shipment_date', { ascending: false })
 
-    // Aggregate by date and fill missing dates
+    // Build chart data (aggregated by date, last 30 days)
     const byDate: Record<string, number> = {}
     for (const d of (data || [])) {
       byDate[d.shipment_date] = (byDate[d.shipment_date] || 0) + (d.shipped_qty || 0)
     }
 
-    // Generate all dates for last 30 days + 7 day forecast
     const days: ShipmentDay[] = []
     for (let i = 29; i >= 0; i--) {
       const d = new Date(today)
@@ -318,6 +400,12 @@ export default function SafetyStockPage() {
     }
 
     setDetailShipments(days)
+    setDetailRecords((data || []).map(d => ({
+      shipment_date: d.shipment_date,
+      shipped_qty: d.shipped_qty || 0,
+      customer_name: d.customer_name || '',
+      order_number: d.order_number || null,
+    })))
   }
 
   // Build forecast chart data
@@ -325,17 +413,14 @@ export default function SafetyStockPage() {
     if (!selectedProduct || detailShipments.length === 0) return []
 
     const data = detailShipments.map(d => ({
-      date: d.date.slice(5), // MM-DD
+      date: d.date.slice(5),
       fullDate: d.date,
       actual: d.qty,
       forecast: null as number | null,
       isForecast: false,
     }))
 
-    // Calculate 7-day moving average for forecast
     const avgDaily = selectedProduct.avgDaily7d
-
-    // Add 7 forecast days
     const today = new Date()
     for (let i = 1; i <= 7; i++) {
       const d = new Date(today)
@@ -353,7 +438,6 @@ export default function SafetyStockPage() {
     return data
   }, [selectedProduct, detailShipments])
 
-  // Stock depletion forecast
   const depletionDays = selectedProduct
     ? selectedProduct.avgDaily7d > 0
       ? Math.round(selectedProduct.product.current_stock_qty / selectedProduct.avgDaily7d)
@@ -364,6 +448,8 @@ export default function SafetyStockPage() {
     if (sortKey !== field) return <ChevronDown className="h-3 w-3 opacity-30" />
     return sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
   }
+
+  const activeFilterCount = urgencyFilter.size + (daysFilter > 0 ? 1 : 0)
 
   if (loading) {
     return (
@@ -436,16 +522,91 @@ export default function SafetyStockPage() {
         </Card>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-        <Input
-          placeholder="제품명, 제품코드, 설비명 검색..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
-        />
+      {/* Search + Filter Toggle */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="제품명, 제품코드, 설비명 검색..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Button
+          variant={showFilters ? 'default' : 'outline'}
+          onClick={() => setShowFilters(!showFilters)}
+          className="gap-2"
+        >
+          <Filter className="h-4 w-4" />
+          필터
+          {activeFilterCount > 0 && (
+            <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
+        </Button>
       </div>
+
+      {/* Filter Panel */}
+      {showFilters && (
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* Urgency filter */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">긴급도</p>
+                <div className="flex flex-wrap gap-2">
+                  {URGENCY_FILTER_OPTIONS.map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => toggleUrgencyFilter(opt.key)}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                        urgencyFilter.has(opt.key)
+                          ? URGENCY_COLORS[opt.key]
+                          : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                      )}
+                    >
+                      <span className={cn('w-2 h-2 rounded-full', opt.color)} />
+                      {opt.label}
+                    </button>
+                  ))}
+                  {urgencyFilter.size > 0 && (
+                    <button
+                      onClick={() => setUrgencyFilter(new Set())}
+                      className="text-xs text-gray-500 hover:text-gray-700 underline ml-1"
+                    >
+                      초기화
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Days remaining filter */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">잔여 일수</p>
+                <div className="flex flex-wrap gap-2">
+                  {DAYS_FILTER_OPTIONS.map((opt, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setDaysFilter(idx)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                        daysFilter === idx
+                          ? 'bg-blue-100 text-blue-800 border-blue-200'
+                          : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Product Table */}
       <Card>
@@ -464,6 +625,11 @@ export default function SafetyStockPage() {
                       제품명 <SortIcon field="product_name" />
                     </button>
                   </th>
+                  <th className="text-left p-3 font-medium">
+                    <button onClick={() => toggleSort('equipment_name')} className="flex items-center gap-1 hover:text-blue-600">
+                      설비 <SortIcon field="equipment_name" />
+                    </button>
+                  </th>
                   <th className="text-right p-3 font-medium">안전재고</th>
                   <th className="text-right p-3 font-medium">현재재고</th>
                   <th className="text-right p-3 font-medium">
@@ -474,6 +640,16 @@ export default function SafetyStockPage() {
                   <th className="text-right p-3 font-medium">
                     <button onClick={() => toggleSort('shipments7d')} className="flex items-center gap-1 justify-end hover:text-blue-600">
                       7일 출하 <SortIcon field="shipments7d" />
+                    </button>
+                  </th>
+                  <th className="text-right p-3 font-medium">
+                    <button onClick={() => toggleSort('shipments30d')} className="flex items-center gap-1 justify-end hover:text-blue-600">
+                      30일 출하 <SortIcon field="shipments30d" />
+                    </button>
+                  </th>
+                  <th className="text-right p-3 font-medium">
+                    <button onClick={() => toggleSort('shipments180d')} className="flex items-center gap-1 justify-end hover:text-blue-600">
+                      6개월 출하 <SortIcon field="shipments180d" />
                     </button>
                   </th>
                   <th className="text-right p-3 font-medium">일평균 출하</th>
@@ -503,8 +679,9 @@ export default function SafetyStockPage() {
                     </td>
                     <td className="p-3">
                       <div className="font-medium">{a.product.product_name}</div>
-                      <div className="text-xs text-gray-500">{a.product.equipment_name}</div>
+                      <div className="text-xs text-gray-400">{a.product.product_code}</div>
                     </td>
+                    <td className="p-3 text-sm text-gray-600">{a.product.equipment_name || '-'}</td>
                     <td className="p-3 text-right tabular-nums">{formatNumber(a.product.safety_stock_qty)}</td>
                     <td className="p-3 text-right tabular-nums">{formatNumber(a.product.current_stock_qty)}</td>
                     <td className="p-3 text-right">
@@ -533,6 +710,8 @@ export default function SafetyStockPage() {
                       </div>
                     </td>
                     <td className="p-3 text-right tabular-nums">{formatNumber(a.shipments7d)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatNumber(a.shipments30d)}</td>
+                    <td className="p-3 text-right tabular-nums">{formatNumber(a.shipments180d)}</td>
                     <td className="p-3 text-right tabular-nums">{a.avgDaily7d > 0 ? formatNumber(Math.round(a.avgDaily7d)) : '-'}</td>
                     <td className="p-3 text-right">
                       <span className={cn(
@@ -554,8 +733,8 @@ export default function SafetyStockPage() {
                 ))}
                 {displayed.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-gray-500">
-                      {search ? '검색 결과가 없습니다.' : '데이터가 없습니다.'}
+                    <td colSpan={12} className="p-8 text-center text-gray-500">
+                      {search || urgencyFilter.size > 0 || daysFilter > 0 ? '검색 결과가 없습니다.' : '데이터가 없습니다.'}
                     </td>
                   </tr>
                 )}
@@ -570,7 +749,7 @@ export default function SafetyStockPage() {
 
       {/* Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           {selectedProduct && (
             <>
               <DialogHeader>
@@ -582,7 +761,12 @@ export default function SafetyStockPage() {
                     <span className={cn('w-1.5 h-1.5 rounded-full', URGENCY_DOT[selectedProduct.urgency])} />
                     {selectedProduct.urgencyLabel}
                   </span>
-                  {selectedProduct.product.product_name}
+                  <div>
+                    <span>{selectedProduct.product.product_name}</span>
+                    <span className="text-sm font-normal text-gray-500 ml-2">
+                      ({selectedProduct.product.equipment_name || '설비 미지정'})
+                    </span>
+                  </div>
                 </DialogTitle>
               </DialogHeader>
 
@@ -630,7 +814,7 @@ export default function SafetyStockPage() {
                 </div>
               </div>
 
-              {/* Chart: Shipment Trend + Forecast */}
+              {/* Chart */}
               {forecastData.length > 0 && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">일별 출하량 추세 및 7일 예측</h3>
@@ -689,6 +873,46 @@ export default function SafetyStockPage() {
                   <div className="absolute inset-0 flex items-center justify-center text-xs font-bold">
                     {formatNumber(selectedProduct.product.current_stock_qty)} / {formatNumber(selectedProduct.product.safety_stock_qty)} ({selectedProduct.stockRatio.toFixed(1)}%)
                   </div>
+                </div>
+              </div>
+
+              {/* Detail Shipment Records Table */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">출하 상세 내역 (최근 90일)</h3>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr className="border-b">
+                          <th className="text-left p-2 font-medium">출하일</th>
+                          <th className="text-right p-2 font-medium">출하수량</th>
+                          <th className="text-left p-2 font-medium">고객사</th>
+                          <th className="text-left p-2 font-medium">주문번호</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailRecords.length > 0 ? (
+                          detailRecords.map((r, i) => (
+                            <tr key={i} className="border-b last:border-b-0 hover:bg-gray-50">
+                              <td className="p-2 tabular-nums">{r.shipment_date}</td>
+                              <td className="p-2 text-right tabular-nums font-medium">{formatNumber(r.shipped_qty)}</td>
+                              <td className="p-2">{r.customer_name}</td>
+                              <td className="p-2 text-gray-500 text-xs">{r.order_number || '-'}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} className="p-4 text-center text-gray-400">출하 내역이 없습니다.</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {detailRecords.length > 0 && (
+                    <div className="p-2 text-xs text-gray-500 border-t bg-gray-50">
+                      총 {detailRecords.length}건
+                    </div>
+                  )}
                 </div>
               </div>
             </>
