@@ -159,8 +159,8 @@ export function EquipmentUtilizationChart({
         title="설비별 가동률 상세"
         columns={[
           { key: "equipment_name", label: "설비명" },
-          { key: "actual", label: "일평균 생산량" },
-          { key: "capacity", label: "일 최대 생산량" },
+          { key: "actual", label: "기간 총 생산량" },
+          { key: "capacity", label: "기간 최대 생산능력" },
           { key: "rate", label: "가동률" },
         ]}
         data={popupData}

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DetailPopup } from "@/components/common/detail-popup"
 import { formatNumber } from "@/lib/utils"
 import { useFactory } from "@/contexts/factory-context"
+import { DateNavigator } from "@/components/common/date-navigator"
 
 interface DailyReportData {
   selected_date: string
@@ -220,12 +221,7 @@ export default function DailyReport() {
 
       <div className="flex items-center gap-4">
         <label className="text-sm font-medium text-gray-700">날짜:</label>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <DateNavigator value={selectedDate} onChange={setSelectedDate} />
       </div>
 
       {loading ? (

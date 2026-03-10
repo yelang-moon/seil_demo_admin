@@ -5,42 +5,96 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase'
 import { Production } from '@/types/database'
 import { useFactory } from '@/contexts/factory-context'
 
-type Period = '1month' | '3months' | '6months'
+type PresetType = '1month' | '2months' | '3months' | '4months' | '5months' | '6months' | 'custom'
+
+const PRESET_LABELS: Record<string, string> = {
+  '1month': '1개월',
+  '2months': '2개월',
+  '3months': '3개월',
+  '4months': '4개월',
+  '5months': '5개월',
+  '6months': '6개월',
+}
+
+const PRESET_DAYS: Record<string, number> = {
+  '1month': 30,
+  '2months': 60,
+  '3months': 90,
+  '4months': 120,
+  '5months': 150,
+  '6months': 180,
+}
 
 export default function AIInsightPage() {
   const { factory } = useFactory()
-  const [period, setPeriod] = useState<Period>('1month')
+  const [activePreset, setActivePreset] = useState<PresetType>('1month')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [latestDate, setLatestDate] = useState('')
   const [markdown, setMarkdown] = useState('')
   const [loading, setLoading] = useState(false)
   const [checkingCache, setCheckingCache] = useState(false)
   const [cachedAt, setCachedAt] = useState<string | null>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
-  const getPeriodDays = (p: Period): number => {
-    switch (p) {
-      case '1month': return 30
-      case '3months': return 90
-      case '6months': return 180
-      default: return 30
-    }
+  const applyPreset = (preset: PresetType, baseDate: string) => {
+    if (preset === 'custom') return
+    const days = PRESET_DAYS[preset] || 30
+    const end = new Date(baseDate + 'T00:00:00')
+    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000)
+    setStartDate(start.toISOString().split('T')[0])
+    setEndDate(baseDate)
+    setActivePreset(preset)
   }
 
-  const getCacheKey = (p: Period) => `ai-insight-${factory}-${p}`
+  const handlePresetClick = (preset: PresetType) => {
+    if (latestDate) applyPreset(preset, latestDate)
+  }
 
-  // Check cache on mount and period change
+  const handleCustomDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') setStartDate(value)
+    else setEndDate(value)
+    setActivePreset('custom')
+  }
+
+  const getCacheKey = () => `ai-insight-${factory}-${startDate}-${endDate}`
+
+  // Fetch latest date on mount
   useEffect(() => {
+    const fetchLatestDate = async () => {
+      try {
+        const { data } = await supabase
+          .from('fact_production')
+          .select('production_date')
+          .eq('factory', factory)
+          .order('production_date', { ascending: false })
+          .limit(1)
+        if (data && data.length > 0) {
+          const latest = data[0].production_date
+          setLatestDate(latest)
+          applyPreset('1month', latest)
+        }
+      } catch (error) {
+        console.error('Error fetching latest date:', error)
+      }
+    }
+    fetchLatestDate()
+  }, [factory])
+
+  // Check cache on dates change
+  useEffect(() => {
+    if (!startDate || !endDate) return
     const checkCache = async () => {
       setCheckingCache(true)
       try {
         const { data } = await supabase
           .from('ai_insight_cache')
           .select('insight_text, updated_at')
-          .eq('cache_key', getCacheKey(period))
+          .eq('cache_key', getCacheKey())
           .single()
 
         if (data) {
@@ -58,31 +112,18 @@ export default function AIInsightPage() {
       }
     }
     checkCache()
-  }, [period, factory])
+  }, [startDate, endDate, factory])
 
   const fetchProductionData = async () => {
     try {
-      const { data: latestRow } = await supabase
-        .from('fact_production')
-        .select('production_date')
-        .eq('factory', factory)
-        .order('production_date', { ascending: false })
-        .limit(1)
-
-      if (!latestRow || latestRow.length === 0) return []
-
-      const latestDate = latestRow[0].production_date
-      const days = getPeriodDays(period)
-      const endDate = new Date(latestDate + 'T00:00:00')
-      const startDate = new Date(endDate.getTime() - days * 24 * 60 * 60 * 1000)
-      const startDateStr = startDate.toISOString().split('T')[0]
+      if (!startDate || !endDate) return []
 
       const { data, error } = await supabase
         .from('fact_production')
         .select('*')
         .eq('factory', factory)
-        .gte('production_date', startDateStr)
-        .lte('production_date', latestDate)
+        .gte('production_date', startDate)
+        .lte('production_date', endDate)
         .order('production_date', { ascending: false })
 
       if (error) throw error
@@ -131,6 +172,8 @@ export default function AIInsightPage() {
     }
   }
 
+  const periodLabel = startDate && endDate ? `${startDate} ~ ${endDate}` : ''
+
   const handleAnalyze = async () => {
     setLoading(true)
     setMarkdown('')
@@ -150,7 +193,7 @@ export default function AIInsightPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          period,
+          period: periodLabel,
           productionData: aggregated.dailyTotals,
           equipmentData: aggregated.equipmentSummary,
           productData: aggregated.productSummary,
@@ -181,7 +224,7 @@ export default function AIInsightPage() {
         await supabase
           .from('ai_insight_cache')
           .upsert(
-            { cache_key: getCacheKey(period), insight_text: result, updated_at: new Date().toISOString() },
+            { cache_key: getCacheKey(), insight_text: result, updated_at: new Date().toISOString() },
             { onConflict: 'cache_key' }
           )
         setCachedAt(new Date().toLocaleString('ko-KR'))
@@ -195,49 +238,67 @@ export default function AIInsightPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">AI 생산분석</h1>
-        <p className="text-gray-600 mt-2">Claude AI를 활용한 종합 생산분석 리포트</p>
-      </div>
-
-      <Card className="p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-6">
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-gray-700">분석 기간</label>
-            <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1month">최근 1개월</SelectItem>
-                <SelectItem value="3months">최근 3개월</SelectItem>
-                <SelectItem value="6months">최근 6개월</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Button onClick={handleAnalyze} disabled={loading} size="lg">
-            {loading ? '분석 중...' : markdown ? '재분석' : 'AI 분석 시작'}
-          </Button>
-
-          {cachedAt && (
-            <p className="text-xs text-gray-400 self-center">
-              마지막 분석: {cachedAt}
-            </p>
-          )}
+    <div className="flex flex-col h-[calc(100vh-4rem)]">
+      <div className="flex-shrink-0 space-y-4 pb-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">AI 생산분석</h1>
+          <p className="text-gray-600 mt-2">Claude AI를 활용한 종합 생산분석 리포트</p>
         </div>
-      </Card>
+
+        <Card className="p-4">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">분석 기간:</span>
+              {Object.entries(PRESET_LABELS).map(([key, label]) => (
+                <Button
+                  key={key}
+                  size="sm"
+                  variant={activePreset === key ? 'default' : 'outline'}
+                  onClick={() => handlePresetClick(key as PresetType)}
+                  className="h-7 px-2.5 text-xs"
+                >
+                  {label}
+                </Button>
+              ))}
+              <div className="flex items-center gap-1 ml-1">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => handleCustomDateChange('start', e.target.value)}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs h-7 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <span className="text-gray-400 text-xs">~</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => handleCustomDateChange('end', e.target.value)}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs h-7 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <Button onClick={handleAnalyze} disabled={loading} size="sm">
+                {loading ? '분석 중...' : markdown ? '재분석' : 'AI 분석 시작'}
+              </Button>
+              {cachedAt && (
+                <p className="text-xs text-gray-400">
+                  마지막 분석: {cachedAt}
+                </p>
+              )}
+            </div>
+          </div>
+        </Card>
+      </div>
 
       {checkingCache && (
         <div className="text-center py-8 text-gray-500">캐시 확인 중...</div>
       )}
 
       {markdown && (
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden flex-1 min-h-0">
           <div
             ref={contentRef}
-            className="overflow-y-auto p-6 md:p-8 max-h-[700px]"
+            className="overflow-y-auto p-6 md:p-8 h-full"
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
@@ -308,9 +369,11 @@ export default function AIInsightPage() {
       )}
 
       {!markdown && !checkingCache && !loading && (
-        <Card className="p-12 text-center text-gray-500">
-          <p className="text-lg mb-2">아직 분석 결과가 없습니다</p>
-          <p className="text-sm">위 &quot;AI 분석 시작&quot; 버튼을 눌러 분석을 실행하세요.</p>
+        <Card className="p-12 text-center text-gray-500 flex-1 flex items-center justify-center">
+          <div>
+            <p className="text-lg mb-2">아직 분석 결과가 없습니다</p>
+            <p className="text-sm">위 &quot;AI 분석 시작&quot; 버튼을 눌러 분석을 실행하세요.</p>
+          </div>
         </Card>
       )}
     </div>

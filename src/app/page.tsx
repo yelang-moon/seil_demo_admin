@@ -8,16 +8,28 @@ import { EquipmentProductionChart } from "@/components/dashboard/equipment-produ
 import { ProductMixChart } from "@/components/dashboard/product-mix-chart"
 import { EquipmentUtilizationChart } from "@/components/dashboard/equipment-utilization-chart"
 import { MonthlyTrendChart } from "@/components/dashboard/monthly-trend-chart"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 import { useFactory } from "@/contexts/factory-context"
 
-type PeriodType = "1month" | "3months" | "6months"
+type PresetType = "1month" | "2months" | "3months" | "4months" | "5months" | "6months" | "custom"
+
+const PRESET_LABELS: Record<string, string> = {
+  "1month": "1개월",
+  "2months": "2개월",
+  "3months": "3개월",
+  "4months": "4개월",
+  "5months": "5개월",
+  "6months": "6개월",
+}
+
+const PRESET_DAYS: Record<string, number> = {
+  "1month": 30,
+  "2months": 60,
+  "3months": 90,
+  "4months": 120,
+  "5months": 150,
+  "6months": 180,
+}
 
 interface DailyProduction {
   date: string
@@ -81,7 +93,9 @@ interface WorkerDetail {
 
 export default function Dashboard() {
   const { factory } = useFactory()
-  const [period, setPeriod] = useState<PeriodType>("1month")
+  const [activePreset, setActivePreset] = useState<PresetType>("1month")
+  const [chartStartDate, setChartStartDate] = useState<string>("")
+  const [chartEndDate, setChartEndDate] = useState<string>("")
   const [latestDate, setLatestDate] = useState<string>("")
   const [kpiData, setKpiData] = useState({
     periodProduction: 0,
@@ -105,22 +119,31 @@ export default function Dashboard() {
   const [workerDetails, setWorkerDetails] = useState<WorkerDetail[]>([])
   const [totalEquipmentCount, setTotalEquipmentCount] = useState(0)
 
-  const getDaysBack = (type: PeriodType): number => {
-    switch (type) {
-      case "1month": return 30
-      case "3months": return 90
-      case "6months": return 180
-      default: return 30
-    }
+  const applyPreset = (preset: PresetType, baseDate: string) => {
+    if (preset === "custom") return
+    const days = PRESET_DAYS[preset] || 30
+    const end = new Date(baseDate + "T00:00:00")
+    const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000)
+    setChartStartDate(start.toISOString().split("T")[0])
+    setChartEndDate(baseDate)
+    setActivePreset(preset)
   }
 
-  const getDateRange = (daysBack: number, baseDate: string) => {
-    const end = new Date(baseDate + "T00:00:00")
-    const start = new Date(end.getTime() - daysBack * 24 * 60 * 60 * 1000)
-    return {
-      startDate: start.toISOString().split("T")[0],
-      endDate: end.toISOString().split("T")[0],
-    }
+  const handlePresetClick = (preset: PresetType) => {
+    if (latestDate) applyPreset(preset, latestDate)
+  }
+
+  const handleCustomDateChange = (type: "start" | "end", value: string) => {
+    if (type === "start") setChartStartDate(value)
+    else setChartEndDate(value)
+    setActivePreset("custom")
+  }
+
+  const getChartDaysBack = (): number => {
+    if (!chartStartDate || !chartEndDate) return 30
+    const start = new Date(chartStartDate + "T00:00:00")
+    const end = new Date(chartEndDate + "T00:00:00")
+    return Math.max(1, Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)))
   }
 
   // Helper: get ISO week string like "2024-W03"
@@ -159,7 +182,10 @@ export default function Dashboard() {
           .order("production_date", { ascending: false })
           .limit(1)
         if (data && data.length > 0) {
-          setLatestDate(data[0].production_date)
+          const latest = data[0].production_date
+          setLatestDate(latest)
+          // Set default chart dates (1 month preset)
+          applyPreset("1month", latest)
         }
       } catch (error) {
         console.error("Error fetching latest date:", error)
@@ -298,12 +324,13 @@ export default function Dashboard() {
 
   // Fetch chart data
   const fetchChartData = useCallback(async () => {
-    if (!latestDate) return
+    if (!chartStartDate || !chartEndDate) return
     setLoading(true)
 
     try {
-      const daysBack = getDaysBack(period)
-      const { startDate, endDate } = getDateRange(daysBack, latestDate)
+      const startDate = chartStartDate
+      const endDate = chartEndDate
+      const daysBack = getChartDaysBack()
 
       const { data: productionData } = await supabase
         .from("fact_production")
@@ -354,6 +381,8 @@ export default function Dashboard() {
         .select("equipment_name, daily_max_qty")
         .eq("factory", factory)
 
+      // Equipment utilization: totalActual / (daily_max_qty * periodDays)
+      const periodDays = daysBack
       const utilMap = new Map<string, { actual: number }>()
       productionData.forEach((row) => {
         const equipName = row.equipment_name || "미지정"
@@ -364,8 +393,9 @@ export default function Dashboard() {
       const utilData: EquipmentUtil[] = []
       utilMap.forEach((value, equipName) => {
         const maxQty = productDims?.find((p) => p.equipment_name === equipName)?.daily_max_qty || 0
-        const daysWorked = new Set(productionData.filter((r) => r.equipment_name === equipName).map((r) => r.production_date)).size
-        utilData.push({ equipment_name: equipName, actual: Math.round(value.actual / Math.max(daysWorked, 1)), capacity: maxQty || 0 })
+        // capacity = daily_max_qty * period days
+        const totalCapacity = maxQty * periodDays
+        utilData.push({ equipment_name: equipName, actual: value.actual, capacity: totalCapacity })
       })
       setEquipmentUtilData(utilData)
 
@@ -388,36 +418,56 @@ export default function Dashboard() {
     } finally {
       setLoading(false)
     }
-  }, [latestDate, period, factory])
+  }, [chartStartDate, chartEndDate, factory])
 
   useEffect(() => {
-    if (latestDate) {
-      fetchKPIData()
-      fetchChartData()
-    }
-  }, [latestDate, fetchKPIData, fetchChartData])
+    if (latestDate) fetchKPIData()
+  }, [latestDate, fetchKPIData])
+
+  useEffect(() => {
+    if (chartStartDate && chartEndDate) fetchChartData()
+  }, [chartStartDate, chartEndDate, fetchChartData])
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">메인 대시보드</h1>
-          {latestDate && (
-            <p className="text-sm text-gray-500 mt-1">데이터 기준일: {latestDate}</p>
-          )}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">메인 대시보드</h1>
+            {chartStartDate && chartEndDate && (
+              <p className="text-sm text-gray-500 mt-1">
+                데이터 기준: {chartStartDate} ~ {chartEndDate}
+              </p>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-sm font-medium text-gray-700">차트 기간:</label>
-          <Select value={period} onValueChange={(value) => setPeriod(value as PeriodType)}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1month">최근 1개월</SelectItem>
-              <SelectItem value="3months">최근 3개월</SelectItem>
-              <SelectItem value="6months">최근 6개월</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          {Object.entries(PRESET_LABELS).map(([key, label]) => (
+            <Button
+              key={key}
+              size="sm"
+              variant={activePreset === key ? "default" : "outline"}
+              onClick={() => handlePresetClick(key as PresetType)}
+              className="h-8 px-3 text-xs"
+            >
+              {label}
+            </Button>
+          ))}
+          <div className="flex items-center gap-1 ml-2">
+            <input
+              type="date"
+              value={chartStartDate}
+              onChange={(e) => handleCustomDateChange("start", e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs h-8 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <span className="text-gray-400 text-xs">~</span>
+            <input
+              type="date"
+              value={chartEndDate}
+              onChange={(e) => handleCustomDateChange("end", e.target.value)}
+              className="px-2 py-1 border border-gray-300 rounded text-xs h-8 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
         </div>
       </div>
 

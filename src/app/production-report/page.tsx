@@ -16,6 +16,7 @@ import { formatNumber, formatPercent } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 import { useFactory } from "@/contexts/factory-context"
 import { EquipmentNameTooltip, ProductNameTooltip } from "@/components/common/name-tooltip"
+import { DateNavigator } from "@/components/common/date-navigator"
 
 interface ProductionRow {
   equipment_name: string | null
@@ -325,12 +326,7 @@ export default function ProductionReport() {
       {/* Date Picker */}
       <div className="flex items-center gap-4">
         <label className="text-sm font-medium text-gray-700">날짜:</label>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <DateNavigator value={selectedDate} onChange={setSelectedDate} />
       </div>
 
         {loading ? (
