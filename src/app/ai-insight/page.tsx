@@ -11,6 +11,13 @@ import { useFactory } from '@/contexts/factory-context'
 
 type PresetType = '1month' | '3months' | '6months' | 'custom'
 
+interface CacheRecord {
+  id: number
+  cache_key: string
+  insight_text: string
+  updated_at: string
+}
+
 const PRESET_LABELS: Record<string, string> = {
   '1month': '1개월',
   '3months': '3개월',
@@ -33,6 +40,8 @@ export default function AIInsightPage() {
   const [loading, setLoading] = useState(false)
   const [checkingCache, setCheckingCache] = useState(false)
   const [cachedAt, setCachedAt] = useState<string | null>(null)
+  const [reportHistory, setReportHistory] = useState<CacheRecord[]>([])
+  const [showHistory, setShowHistory] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
 
   const applyPreset = (preset: PresetType, baseDate: string) => {
@@ -78,6 +87,24 @@ export default function AIInsightPage() {
     }
     fetchLatestDate()
   }, [factory])
+
+  // Fetch report history
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const { data } = await supabase
+          .from('ai_insight_cache')
+          .select('id, cache_key, insight_text, updated_at')
+          .like('cache_key', `ai-insight-${factory}-%`)
+          .order('updated_at', { ascending: false })
+          .limit(20)
+        if (data) setReportHistory(data as CacheRecord[])
+      } catch (error) {
+        console.error('Error fetching history:', error)
+      }
+    }
+    fetchHistory()
+  }, [factory, cachedAt])
 
   // Check cache on dates change
   useEffect(() => {
@@ -128,6 +155,117 @@ export default function AIInsightPage() {
     }
   }
 
+  const fetchShipmentData = async () => {
+    try {
+      if (!startDate || !endDate) return null
+
+      const { data, error } = await supabase
+        .from('fact_shipment')
+        .select('*')
+        .eq('factory', factory)
+        .gte('shipment_date', startDate)
+        .lte('shipment_date', endDate)
+        .order('shipment_date', { ascending: false })
+
+      if (error) throw error
+      if (!data || data.length === 0) return null
+
+      // Aggregate daily shipments
+      const dailyMap: Record<string, number> = {}
+      const customerMap: Record<string, { totalQty: number; count: number }> = {}
+      const productMap: Record<string, { totalQty: number; count: number }> = {}
+
+      data.forEach((s: { shipment_date: string; shipped_qty: number; customer_name: string; product_name: string }) => {
+        const date = s.shipment_date || ''
+        const qty = s.shipped_qty || 0
+        const customer = s.customer_name || '미지정'
+        const product = s.product_name || '미지정'
+
+        dailyMap[date] = (dailyMap[date] || 0) + qty
+
+        if (!customerMap[customer]) customerMap[customer] = { totalQty: 0, count: 0 }
+        customerMap[customer].totalQty += qty
+        customerMap[customer].count += 1
+
+        if (!productMap[product]) productMap[product] = { totalQty: 0, count: 0 }
+        productMap[product].totalQty += qty
+        productMap[product].count += 1
+      })
+
+      return {
+        dailyShipments: Object.entries(dailyMap)
+          .map(([date, qty]) => ({ date, quantity: qty }))
+          .sort((a, b) => a.date.localeCompare(b.date)),
+        customerSummary: customerMap,
+        productShipmentSummary: productMap,
+      }
+    } catch (error) {
+      console.error('Failed to fetch shipment data:', error)
+      return null
+    }
+  }
+
+  const fetchSafetyStockData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('dim_product')
+        .select('product_code, product_name, safety_stock_qty, current_stock_qty, daily_max_qty')
+        .eq('factory', factory)
+        .gt('safety_stock_qty', 0)
+
+      if (error) throw error
+      if (!data || data.length === 0) return null
+
+      // Get recent 7-day shipment data per product
+      const { data: recentShipments } = await supabase
+        .from('fact_shipment')
+        .select('product_name, shipped_qty')
+        .eq('factory', factory)
+        .gte('shipment_date', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+
+      const shipmentByProduct: Record<string, number> = {}
+      if (recentShipments) {
+        recentShipments.forEach((s: { product_name: string; shipped_qty: number }) => {
+          const key = s.product_name || ''
+          shipmentByProduct[key] = (shipmentByProduct[key] || 0) + (s.shipped_qty || 0)
+        })
+      }
+
+      return data.map((p: { product_code: string; product_name: string; safety_stock_qty: number; current_stock_qty: number; daily_max_qty: number }) => {
+        const safetyStock = p.safety_stock_qty || 0
+        const currentStock = p.current_stock_qty || 0
+        const stockRatio = safetyStock > 0 ? Math.round((currentStock / safetyStock) * 100) : 0
+        const avgDaily7d = (shipmentByProduct[p.product_name] || 0) / 7
+        const daysRemaining = avgDaily7d > 0 ? Math.round((currentStock / avgDaily7d) * 10) / 10 : null
+
+        let urgency = '양호'
+        if (avgDaily7d > 0) {
+          if (daysRemaining !== null && daysRemaining < 3) urgency = '긴급'
+          else if (daysRemaining !== null && daysRemaining < 7) urgency = '우선'
+          else if (stockRatio < 100 || (daysRemaining !== null && daysRemaining < 14)) urgency = '주의'
+        } else {
+          if (stockRatio < 50) urgency = '주의'
+        }
+
+        return {
+          제품명: p.product_name,
+          안전재고: safetyStock,
+          현재재고: currentStock,
+          재고율: `${stockRatio}%`,
+          일평균출하량_7d: Math.round(avgDaily7d * 10) / 10,
+          잔여일수: daysRemaining,
+          긴급도: urgency,
+        }
+      }).sort((a: { 긴급도: string }, b: { 긴급도: string }) => {
+        const order: Record<string, number> = { '긴급': 0, '우선': 1, '주의': 2, '양호': 3 }
+        return (order[a.긴급도] ?? 4) - (order[b.긴급도] ?? 4)
+      })
+    } catch (error) {
+      console.error('Failed to fetch safety stock data:', error)
+      return null
+    }
+  }
+
   const aggregateData = (productions: Production[]) => {
     const dailyTotals: Record<string, { quantity: number; defectQty: number }> = {}
     const equipmentSummary: Record<string, { totalQty: number; defectQty: number }> = {}
@@ -172,9 +310,15 @@ export default function AIInsightPage() {
     setLoading(true)
     setMarkdown('')
     setCachedAt(null)
+    setShowHistory(false)
 
     try {
-      const productions = await fetchProductionData()
+      const [productions, shipmentData, safetyStockData] = await Promise.all([
+        fetchProductionData(),
+        fetchShipmentData(),
+        fetchSafetyStockData(),
+      ])
+
       if (productions.length === 0) {
         setMarkdown('분석할 생산 데이터가 없습니다.')
         setLoading(false)
@@ -191,6 +335,8 @@ export default function AIInsightPage() {
           productionData: aggregated.dailyTotals,
           equipmentData: aggregated.equipmentSummary,
           productData: aggregated.productSummary,
+          shipmentData,
+          safetyStockData,
         }),
       })
 
@@ -231,12 +377,41 @@ export default function AIInsightPage() {
     }
   }
 
+  const loadHistoryReport = (record: CacheRecord) => {
+    setMarkdown(record.insight_text)
+    setCachedAt(new Date(record.updated_at).toLocaleString('ko-KR'))
+    // Parse dates from cache_key: ai-insight-factory-startDate-endDate
+    const parts = record.cache_key.split('-')
+    if (parts.length >= 5) {
+      // cache_key format: ai-insight-{factory}-{YYYY-MM-DD}-{YYYY-MM-DD}
+      const keyWithoutPrefix = record.cache_key.replace(`ai-insight-${factory}-`, '')
+      const dateParts = keyWithoutPrefix.split('-')
+      if (dateParts.length >= 6) {
+        const s = `${dateParts[0]}-${dateParts[1]}-${dateParts[2]}`
+        const e = `${dateParts[3]}-${dateParts[4]}-${dateParts[5]}`
+        setStartDate(s)
+        setEndDate(e)
+        setActivePreset('custom')
+      }
+    }
+    setShowHistory(false)
+  }
+
+  const parsePeriodFromKey = (cacheKey: string) => {
+    const keyWithoutPrefix = cacheKey.replace(`ai-insight-${factory}-`, '')
+    const dateParts = keyWithoutPrefix.split('-')
+    if (dateParts.length >= 6) {
+      return `${dateParts[0]}-${dateParts[1]}-${dateParts[2]} ~ ${dateParts[3]}-${dateParts[4]}-${dateParts[5]}`
+    }
+    return cacheKey
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)]">
       <div className="flex-shrink-0 space-y-4 pb-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">AI 생산분석</h1>
-          <p className="text-gray-600 mt-2">Claude AI를 활용한 종합 생산분석 리포트</p>
+          <h1 className="text-3xl font-bold text-gray-900">AI 인사이트</h1>
+          <p className="text-gray-600 mt-2">Claude AI를 활용한 종합 생산·출하·재고 분석 리포트</p>
         </div>
 
         <Card className="p-4">
@@ -274,6 +449,14 @@ export default function AIInsightPage() {
               <Button onClick={handleAnalyze} disabled={loading} size="sm">
                 {loading ? '분석 중...' : markdown ? '재분석' : 'AI 분석 시작'}
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHistory(!showHistory)}
+                className="h-7 px-2.5 text-xs"
+              >
+                {showHistory ? '리포트 목록 닫기' : `이전 리포트 (${reportHistory.length})`}
+              </Button>
               {cachedAt && (
                 <p className="text-xs text-gray-400">
                   마지막 분석: {cachedAt}
@@ -282,6 +465,43 @@ export default function AIInsightPage() {
             </div>
           </div>
         </Card>
+
+        {showHistory && reportHistory.length > 0 && (
+          <Card className="p-3">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">이전 분석 리포트</h3>
+            <div className="max-h-48 overflow-y-auto space-y-1">
+              {reportHistory.map((record) => {
+                const isActive = record.cache_key === getCacheKey()
+                return (
+                  <button
+                    key={record.id}
+                    onClick={() => loadHistoryReport(record)}
+                    className={`w-full text-left px-3 py-2 rounded text-xs transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 border border-blue-200 text-blue-700'
+                        : 'hover:bg-gray-50 border border-transparent text-gray-600'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{parsePeriodFromKey(record.cache_key)}</span>
+                      <span className="text-gray-400 ml-2">
+                        {new Date(record.updated_at).toLocaleString('ko-KR', {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-gray-400 mt-0.5 truncate">
+                      {record.insight_text.substring(0, 80)}...
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          </Card>
+        )}
       </div>
 
       {checkingCache && (
@@ -362,11 +582,11 @@ export default function AIInsightPage() {
         </Card>
       )}
 
-      {!markdown && !checkingCache && !loading && (
+      {!markdown && !checkingCache && !loading && !showHistory && (
         <Card className="p-12 text-center text-gray-500 flex-1 flex items-center justify-center">
           <div>
             <p className="text-lg mb-2">아직 분석 결과가 없습니다</p>
-            <p className="text-sm">위 &quot;AI 분석 시작&quot; 버튼을 눌러 분석을 실행하세요.</p>
+            <p className="text-sm">위 &quot;AI 분석 시작&quot; 버튼을 눌러 생산·출하·재고 종합 분석을 실행하세요.</p>
           </div>
         </Card>
       )}

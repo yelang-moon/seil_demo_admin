@@ -201,7 +201,7 @@ export function KPICards({
             <div className={`text-2xl font-bold ${isPositiveChange ? "text-green-600" : "text-red-600"}`}>
               {isPositiveChange ? "+" : ""}{formatNumber(yearChange)}
             </div>
-            <p className="text-xs text-gray-500 mt-1">직전 30일 vs 작년 동기간</p>
+            <p className="text-xs text-gray-500 mt-1">기간내 생산량 vs 작년 동기간</p>
           </CardContent>
         </Card>
       </div>

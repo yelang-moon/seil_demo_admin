@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useFactory } from '@/contexts/factory-context'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
@@ -24,7 +23,8 @@ import {
   Search,
   ChevronUp,
   ChevronDown,
-  Filter,
+  ChevronRight,
+  Ban,
 } from 'lucide-react'
 import {
   Bar,
@@ -61,6 +61,8 @@ interface ShipmentRecord {
   order_number: string | null
 }
 
+type UrgencyLevel = 'critical' | 'high' | 'medium' | 'low' | 'discontinued'
+
 interface ProductAnalysis {
   product: ProductStock
   stockRatio: number
@@ -70,7 +72,7 @@ interface ProductAnalysis {
   avgDaily7d: number
   avgDaily30d: number
   daysRemaining: number
-  urgency: 'critical' | 'high' | 'medium' | 'low'
+  urgency: UrgencyLevel
   urgencyLabel: string
   trend: 'up' | 'down' | 'stable'
 }
@@ -80,43 +82,56 @@ function calcUrgency(
   stockRatio: number,
   daysRemaining: number,
   hasRecentShipment: boolean,
+  has30dShipment: boolean,
   avgDaily7d: number,
   currentStock: number,
   safetyStock: number
-): { urgency: ProductAnalysis['urgency']; label: string } {
+): { urgency: UrgencyLevel; label: string } {
+  // Discontinued: no shipments in 30+ days → not selling anymore
+  if (!has30dShipment && !hasRecentShipment) {
+    return { urgency: 'discontinued', label: '판매중단' }
+  }
+
+  // Dead stock case: very high stock with no recent shipments
   if (stockRatio > 250 && !hasRecentShipment) {
     return { urgency: 'medium', label: '악성재고 의심' }
   }
+
   if (hasRecentShipment && avgDaily7d > 0) {
     if (daysRemaining < 3) return { urgency: 'critical', label: '긴급 생산 필요' }
     if (daysRemaining < 7) return { urgency: 'high', label: '생산 우선' }
     if (daysRemaining < 14 || stockRatio < 100) return { urgency: 'medium', label: '주의' }
     return { urgency: 'low', label: '양호' }
   }
+
   if (stockRatio < 50) return { urgency: 'medium', label: '재고 부족' }
   if (stockRatio > 200) return { urgency: 'low', label: '과잉 재고' }
   return { urgency: 'low', label: '양호' }
 }
 
-const URGENCY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
+const URGENCY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3, discontinued: 4 }
 const URGENCY_COLORS: Record<string, string> = {
   critical: 'bg-red-100 text-red-800 border-red-200',
   high: 'bg-orange-100 text-orange-800 border-orange-200',
   medium: 'bg-yellow-100 text-yellow-800 border-yellow-200',
   low: 'bg-green-100 text-green-800 border-green-200',
+  discontinued: 'bg-gray-100 text-gray-500 border-gray-200',
 }
 const URGENCY_DOT: Record<string, string> = {
   critical: 'bg-red-500',
   high: 'bg-orange-500',
   medium: 'bg-yellow-500',
   low: 'bg-green-500',
+  discontinued: 'bg-gray-400',
 }
 
-const URGENCY_FILTER_OPTIONS: { key: ProductAnalysis['urgency']; label: string; color: string }[] = [
-  { key: 'critical', label: '긴급', color: 'bg-red-500' },
-  { key: 'high', label: '우선', color: 'bg-orange-500' },
-  { key: 'medium', label: '주의', color: 'bg-yellow-500' },
-  { key: 'low', label: '양호', color: 'bg-green-500' },
+const URGENCY_FILTER_OPTIONS: { key: UrgencyLevel | 'all'; label: string; dotColor: string }[] = [
+  { key: 'all', label: '전체', dotColor: '' },
+  { key: 'critical', label: '긴급', dotColor: 'bg-red-500' },
+  { key: 'high', label: '우선', dotColor: 'bg-orange-500' },
+  { key: 'medium', label: '주의', dotColor: 'bg-yellow-500' },
+  { key: 'low', label: '양호', dotColor: 'bg-green-500' },
+  { key: 'discontinued', label: '판매중단', dotColor: 'bg-gray-400' },
 ]
 
 const DAYS_FILTER_OPTIONS = [
@@ -130,6 +145,61 @@ const DAYS_FILTER_OPTIONS = [
 
 type SortKey = 'urgency' | 'stockRatio' | 'daysRemaining' | 'shipments7d' | 'shipments30d' | 'shipments180d' | 'product_name' | 'equipment_name'
 type SortDir = 'asc' | 'desc'
+
+// ====== Custom Dropdown ======
+function Dropdown({ label, value, options, onChange }: {
+  label: string
+  value: string
+  options: { key: string; label: string; dotColor?: string }[]
+  onChange: (key: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const selected = options.find(o => o.key === value)
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex items-center gap-2 px-3 py-2 border rounded-lg text-sm font-medium transition-all bg-white hover:border-gray-400',
+          value !== 'all' && value !== '0' ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-700'
+        )}
+      >
+        <span className="text-xs text-gray-400">{label}</span>
+        {selected?.dotColor && <span className={cn('w-2 h-2 rounded-full', selected.dotColor)} />}
+        <span>{selected?.label}</span>
+        <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white border rounded-lg shadow-lg z-50 min-w-[140px] py-1">
+          {options.map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => { onChange(opt.key); setOpen(false) }}
+              className={cn(
+                'w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-50 transition-colors',
+                opt.key === value && 'bg-blue-50 text-blue-700 font-medium'
+              )}
+            >
+              {opt.dotColor && <span className={cn('w-2 h-2 rounded-full', opt.dotColor)} />}
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function SafetyStockPage() {
   const { factory } = useFactory()
@@ -146,18 +216,8 @@ export default function SafetyStockPage() {
   const [detailOpen, setDetailOpen] = useState(false)
 
   // Filters
-  const [urgencyFilter, setUrgencyFilter] = useState<Set<ProductAnalysis['urgency']>>(new Set())
-  const [daysFilter, setDaysFilter] = useState(0) // index into DAYS_FILTER_OPTIONS
-  const [showFilters, setShowFilters] = useState(false)
-
-  const toggleUrgencyFilter = (u: ProductAnalysis['urgency']) => {
-    setUrgencyFilter(prev => {
-      const next = new Set(prev)
-      if (next.has(u)) next.delete(u)
-      else next.add(u)
-      return next
-    })
-  }
+  const [urgencyFilter, setUrgencyFilter] = useState<string>('all')
+  const [daysFilter, setDaysFilter] = useState<string>('0')
 
   // Fetch all data
   const fetchData = useCallback(async () => {
@@ -174,12 +234,10 @@ export default function SafetyStockPage() {
 
       const today = new Date()
 
-      // 30-day shipments (for daily analysis)
       const d30ago = new Date(today)
       d30ago.setDate(d30ago.getDate() - 30)
       const d30str = `${d30ago.getFullYear()}-${String(d30ago.getMonth() + 1).padStart(2, '0')}-${String(d30ago.getDate()).padStart(2, '0')}`
 
-      // 180-day shipments (for 6-month totals)
       const d180ago = new Date(today)
       d180ago.setDate(d180ago.getDate() - 180)
       const d180str = `${d180ago.getFullYear()}-${String(d180ago.getMonth() + 1).padStart(2, '0')}-${String(d180ago.getDate()).padStart(2, '0')}`
@@ -202,7 +260,6 @@ export default function SafetyStockPage() {
       if (shipsRes30.error) throw shipsRes30.error
       if (shipsRes180.error) throw shipsRes180.error
 
-      // Build 30-day shipment map by product_code
       const sMap: Record<string, ShipmentDay[]> = {}
       for (const s of (shipsRes30.data || [])) {
         const code = s.product_code || ''
@@ -215,13 +272,11 @@ export default function SafetyStockPage() {
         }
       }
 
-      // Build 180-day totals (only the 150 days before the 30-day window)
       const s180Map: Record<string, number> = {}
       for (const s of (shipsRes180.data || [])) {
         const code = s.product_code || ''
         s180Map[code] = (s180Map[code] || 0) + (s.shipped_qty || 0)
       }
-      // Add 30-day data to get full 180-day total
       for (const code of Object.keys(sMap)) {
         const total30 = sMap[code].reduce((sum, d) => sum + d.qty, 0)
         s180Map[code] = (s180Map[code] || 0) + total30
@@ -263,7 +318,8 @@ export default function SafetyStockPage() {
       const daysRemaining = avgDaily7d > 0 ? p.current_stock_qty / avgDaily7d : 999
 
       const hasRecentShipment = total7d > 0
-      const { urgency, label } = calcUrgency(stockRatio, daysRemaining, hasRecentShipment, avgDaily7d, p.current_stock_qty, p.safety_stock_qty)
+      const has30dShipment = total30d > 0
+      const { urgency, label } = calcUrgency(stockRatio, daysRemaining, hasRecentShipment, has30dShipment, avgDaily7d, p.current_stock_qty, p.safety_stock_qty)
 
       let trend: 'up' | 'down' | 'stable' = 'stable'
       if (avgDaily30d > 0 && avgDaily7d > 0) {
@@ -304,12 +360,13 @@ export default function SafetyStockPage() {
     }
 
     // Urgency filter
-    if (urgencyFilter.size > 0) {
-      filtered = filtered.filter(a => urgencyFilter.has(a.urgency))
+    if (urgencyFilter !== 'all') {
+      filtered = filtered.filter(a => a.urgency === urgencyFilter)
     }
 
     // Days remaining filter
-    const df = DAYS_FILTER_OPTIONS[daysFilter]
+    const dfIdx = parseInt(daysFilter)
+    const df = DAYS_FILTER_OPTIONS[dfIdx]
     if (df && (df.min > 0 || df.max < Infinity)) {
       filtered = filtered.filter(a => a.daysRemaining >= df.min && a.daysRemaining < df.max)
     }
@@ -351,10 +408,11 @@ export default function SafetyStockPage() {
   // KPI stats
   const stats = useMemo(() => {
     const total = analyses.length
-    const belowSafety = analyses.filter(a => a.stockRatio < 100).length
+    const belowSafety = analyses.filter(a => a.stockRatio < 100 && a.urgency !== 'discontinued').length
     const critical = analyses.filter(a => a.urgency === 'critical' || a.urgency === 'high').length
-    const deadStock = analyses.filter(a => a.stockRatio > 250 && a.shipments30d === 0).length
-    return { total, belowSafety, critical, deadStock }
+    const deadStock = analyses.filter(a => a.stockRatio > 250 && a.shipments30d === 0 && a.urgency !== 'discontinued').length
+    const discontinued = analyses.filter(a => a.urgency === 'discontinued').length
+    return { total, belowSafety, critical, deadStock, discontinued }
   }, [analyses])
 
   const toggleSort = (key: SortKey) => {
@@ -376,7 +434,6 @@ export default function SafetyStockPage() {
     d90ago.setDate(d90ago.getDate() - 90)
     const d90str = `${d90ago.getFullYear()}-${String(d90ago.getMonth() + 1).padStart(2, '0')}-${String(d90ago.getDate()).padStart(2, '0')}`
 
-    // Fetch detail shipment data (with customer info for table)
     const { data } = await supabase
       .from('fact_shipment')
       .select('shipment_date, shipped_qty, customer_name, order_number')
@@ -385,7 +442,6 @@ export default function SafetyStockPage() {
       .gte('shipment_date', d90str)
       .order('shipment_date', { ascending: false })
 
-    // Build chart data (aggregated by date, last 30 days)
     const byDate: Record<string, number> = {}
     for (const d of (data || [])) {
       byDate[d.shipment_date] = (byDate[d.shipment_date] || 0) + (d.shipped_qty || 0)
@@ -408,7 +464,6 @@ export default function SafetyStockPage() {
     })))
   }
 
-  // Build forecast chart data
   const forecastData = useMemo(() => {
     if (!selectedProduct || detailShipments.length === 0) return []
 
@@ -417,7 +472,6 @@ export default function SafetyStockPage() {
       fullDate: d.date,
       actual: d.qty,
       forecast: null as number | null,
-      isForecast: false,
     }))
 
     const avgDaily = selectedProduct.avgDaily7d
@@ -431,7 +485,6 @@ export default function SafetyStockPage() {
         fullDate: `${d.getFullYear()}-${ds}`,
         actual: null as any,
         forecast: Math.round(avgDaily),
-        isForecast: true,
       })
     }
 
@@ -449,8 +502,6 @@ export default function SafetyStockPage() {
     return sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
   }
 
-  const activeFilterCount = urgencyFilter.size + (daysFilter > 0 ? 1 : 0)
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -467,7 +518,7 @@ export default function SafetyStockPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -520,11 +571,36 @@ export default function SafetyStockPage() {
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gray-100 rounded-lg">
+                <Ban className="h-5 w-5 text-gray-400" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">판매중단</p>
+                <p className="text-2xl font-bold text-gray-400">{stats.discontinued}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Search + Filter Toggle */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
+      {/* Filters row: dropdowns then search */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Dropdown
+          label="긴급도"
+          value={urgencyFilter}
+          options={URGENCY_FILTER_OPTIONS.map(o => ({ key: o.key, label: o.label, dotColor: o.dotColor }))}
+          onChange={(v) => setUrgencyFilter(v)}
+        />
+        <Dropdown
+          label="잔여일수"
+          value={daysFilter}
+          options={DAYS_FILTER_OPTIONS.map((o, i) => ({ key: String(i), label: o.label }))}
+          onChange={(v) => setDaysFilter(v)}
+        />
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder="제품명, 제품코드, 설비명 검색..."
@@ -533,80 +609,7 @@ export default function SafetyStockPage() {
             className="pl-10"
           />
         </div>
-        <Button
-          variant={showFilters ? 'default' : 'outline'}
-          onClick={() => setShowFilters(!showFilters)}
-          className="gap-2"
-        >
-          <Filter className="h-4 w-4" />
-          필터
-          {activeFilterCount > 0 && (
-            <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              {activeFilterCount}
-            </span>
-          )}
-        </Button>
       </div>
-
-      {/* Filter Panel */}
-      {showFilters && (
-        <Card>
-          <CardContent className="pt-4 pb-4">
-            <div className="flex flex-col md:flex-row gap-6">
-              {/* Urgency filter */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">긴급도</p>
-                <div className="flex flex-wrap gap-2">
-                  {URGENCY_FILTER_OPTIONS.map(opt => (
-                    <button
-                      key={opt.key}
-                      onClick={() => toggleUrgencyFilter(opt.key)}
-                      className={cn(
-                        'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                        urgencyFilter.has(opt.key)
-                          ? URGENCY_COLORS[opt.key]
-                          : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                      )}
-                    >
-                      <span className={cn('w-2 h-2 rounded-full', opt.color)} />
-                      {opt.label}
-                    </button>
-                  ))}
-                  {urgencyFilter.size > 0 && (
-                    <button
-                      onClick={() => setUrgencyFilter(new Set())}
-                      className="text-xs text-gray-500 hover:text-gray-700 underline ml-1"
-                    >
-                      초기화
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Days remaining filter */}
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase mb-2">잔여 일수</p>
-                <div className="flex flex-wrap gap-2">
-                  {DAYS_FILTER_OPTIONS.map((opt, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setDaysFilter(idx)}
-                      className={cn(
-                        'px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                        daysFilter === idx
-                          ? 'bg-blue-100 text-blue-800 border-blue-200'
-                          : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
-                      )}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Product Table */}
       <Card>
@@ -665,7 +668,10 @@ export default function SafetyStockPage() {
                 {displayed.map((a) => (
                   <tr
                     key={a.product.id}
-                    className="border-b hover:bg-gray-50 cursor-pointer transition-colors"
+                    className={cn(
+                      'border-b hover:bg-gray-50 cursor-pointer transition-colors',
+                      a.urgency === 'discontinued' && 'opacity-50'
+                    )}
                     onClick={() => openDetail(a)}
                   >
                     <td className="p-3">
@@ -734,7 +740,7 @@ export default function SafetyStockPage() {
                 {displayed.length === 0 && (
                   <tr>
                     <td colSpan={12} className="p-8 text-center text-gray-500">
-                      {search || urgencyFilter.size > 0 || daysFilter > 0 ? '검색 결과가 없습니다.' : '데이터가 없습니다.'}
+                      {search || urgencyFilter !== 'all' || daysFilter !== '0' ? '검색 결과가 없습니다.' : '데이터가 없습니다.'}
                     </td>
                   </tr>
                 )}
