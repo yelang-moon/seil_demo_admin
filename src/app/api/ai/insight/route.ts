@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { period, productionData, equipmentData, productData, shipmentData, safetyStockData } = await request.json()
+    const { period, productionData, equipmentData, productData, shipmentData, safetyStockData, utilizationData } = await request.json()
 
     if (!period || !productionData) {
       return NextResponse.json(
@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
 
     const hasShipment = shipmentData && (shipmentData.dailyShipments?.length > 0 || Object.keys(shipmentData.customerSummary || {}).length > 0)
     const hasSafetyStock = safetyStockData && safetyStockData.length > 0
+    const hasUtilization = utilizationData && utilizationData.equipmentUtilization?.length > 0
 
     let shipmentSection = ''
     if (hasShipment) {
@@ -38,11 +39,27 @@ export async function POST(request: NextRequest) {
 - 판매중단 제품(최근 30일 출하 없음) 재고 처리 권고`
     }
 
+    let sectionCount = 4 + (hasShipment ? 1 : 0) + (hasSafetyStock ? 1 : 0)
+
+    let utilizationSection = ''
+    if (hasUtilization) {
+      sectionCount++
+      utilizationSection = `
+
+## ${sectionCount}. 설비 가동률 심층 분석 (실제 가동일 기준)
+- 아래 가동률 데이터는 실제 가동일(working day) 기준으로 계산된 것입니다
+- 설비별 가동률을 테이블로 정리 (가동률, 실제생산량, 일일최대능력, 가동일수)
+- 가동률 70% 미만 설비는 원인 분석 및 개선 방안 제시
+- 가동률 95% 이상 설비는 과부하 위험 및 증설 필요성 검토
+- 설비 간 가동률 편차 분석 및 생산 라인 밸런싱 제안`
+    }
+
+    const finalSectionNum = sectionCount + 1
     const finalSection = `
 
-## ${hasShipment && hasSafetyStock ? '7' : hasShipment || hasSafetyStock ? '6' : '5'}. 종합 진단 및 개선 권고
+## ${finalSectionNum}. 종합 진단 및 개선 권고
 - 현재 상태에 대한 솔직한 평가
-- 생산, 품질${hasShipment ? ', 출하' : ''}${hasSafetyStock ? ', 재고' : ''} 전반에 걸친 종합 진단
+- 생산, 품질${hasShipment ? ', 출하' : ''}${hasSafetyStock ? ', 재고' : ''}${hasUtilization ? ', 가동률' : ''} 전반에 걸친 종합 진단
 - 구체적이고 실행 가능한 개선 방안 3~5개
 - 우선순위와 예상 효과 명시`
 
@@ -88,7 +105,7 @@ export async function POST(request: NextRequest) {
 
 ## 4. 생산-출하 연계 분석
 - 생산량 대비 출하량 비교 (과잉생산/부족생산 판단)
-- 재고 축적 또는 소진 추세 분석${shipmentSection}${safetyStockSection}${finalSection}`
+- 재고 축적 또는 소진 추세 분석${shipmentSection}${safetyStockSection}${utilizationSection}${finalSection}`
 
     let userMessage = `분석 기간: ${period}
 
@@ -119,6 +136,14 @@ ${JSON.stringify(shipmentData.productShipmentSummary, null, 2)}`
 
 안전 재고 현황:
 ${JSON.stringify(safetyStockData, null, 2)}`
+    }
+
+    if (hasUtilization) {
+      userMessage += `
+
+설비 가동률 데이터 (실제 가동일 기준):
+- 분석 기간 내 실제 가동일수: ${utilizationData.workingDayCount}일
+${JSON.stringify(utilizationData.equipmentUtilization, null, 2)}`
     }
 
     const streamBody = await streamClaude(systemPrompt, userMessage)

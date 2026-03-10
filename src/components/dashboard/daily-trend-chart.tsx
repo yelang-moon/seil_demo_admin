@@ -49,9 +49,10 @@ export function DailyTrendChart({ data }: DailyTrendChartProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">일별 생산량 추이</CardTitle>
+          <p className="text-xs text-gray-500 mt-1">선택 기간의 일자별 총 생산량 변화 · 클릭하면 해당 일자의 제품별 상세를 볼 수 있습니다</p>
         </CardHeader>
         <CardContent>
-          <div className="w-full h-80">
+          <div className="w-full h-64 md:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>

@@ -206,6 +206,82 @@ export default function AIInsightPage() {
     }
   }
 
+  const fetchUtilizationData = async () => {
+    try {
+      if (!startDate || !endDate) return null
+
+      // Get production data for the period
+      const { data: prodData, error: prodErr } = await supabase
+        .from('fact_production')
+        .select('production_date, equipment_name, finished_qty')
+        .eq('factory', factory)
+        .gte('production_date', startDate)
+        .lte('production_date', endDate)
+
+      if (prodErr) throw prodErr
+      if (!prodData || prodData.length === 0) return null
+
+      // Get equipment name mapping
+      const { data: equipNames } = await supabase
+        .from('dim_equipment')
+        .select('name_legacy, name_official, name_short')
+        .eq('factory', factory)
+
+      const nameMap: Record<string, string> = {}
+      ;(equipNames || []).forEach((e: { name_legacy: string; name_official: string; name_short: string }) => {
+        if (e.name_legacy) nameMap[e.name_legacy] = e.name_official || e.name_short || e.name_legacy
+      })
+
+      const mapName = (name: string | null): string => name ? (nameMap[name] || name) : '미지정'
+
+      // Get daily_max_qty for each equipment
+      const { data: productDims } = await supabase
+        .from('dim_product')
+        .select('equipment_name, daily_max_qty')
+        .eq('factory', factory)
+
+      const capacitiesMap: Record<string, number> = {}
+      ;(productDims || []).forEach((p: { equipment_name: string; daily_max_qty: number }) => {
+        const mapped = mapName(p.equipment_name)
+        capacitiesMap[mapped] = p.daily_max_qty || 0
+      })
+
+      // Working days = DISTINCT production_date
+      const workingDaysSet = new Set<string>()
+      prodData.forEach((row: { production_date: string }) => {
+        if (row.production_date) workingDaysSet.add(row.production_date)
+      })
+      const workingDayCount = workingDaysSet.size
+
+      // Equipment actual production
+      const equipActual: Record<string, number> = {}
+      prodData.forEach((row: { equipment_name: string; finished_qty: number }) => {
+        const mapped = mapName(row.equipment_name)
+        equipActual[mapped] = (equipActual[mapped] || 0) + (row.finished_qty || 0)
+      })
+
+      // Build utilization data
+      const result = Object.entries(equipActual).map(([equip, actual]) => {
+        const dailyCapacity = capacitiesMap[equip] || 0
+        const totalCapacity = dailyCapacity * workingDayCount
+        const utilRate = totalCapacity > 0 ? Math.round((actual / totalCapacity) * 1000) / 10 : 0
+        return {
+          설비명: equip,
+          기간생산량: actual,
+          일일최대생산능력: dailyCapacity,
+          가동일수: workingDayCount,
+          기간최대생산능력: totalCapacity,
+          가동률: `${utilRate}%`,
+        }
+      }).sort((a, b) => parseFloat(b.가동률) - parseFloat(a.가동률))
+
+      return { workingDayCount, equipmentUtilization: result }
+    } catch (error) {
+      console.error('Failed to fetch utilization data:', error)
+      return null
+    }
+  }
+
   const fetchSafetyStockData = async () => {
     try {
       const { data, error } = await supabase
@@ -314,10 +390,11 @@ export default function AIInsightPage() {
     setShowHistory(false)
 
     try {
-      const [productions, shipmentData, safetyStockData] = await Promise.all([
+      const [productions, shipmentData, safetyStockData, utilizationData] = await Promise.all([
         fetchProductionData(),
         fetchShipmentData(),
         fetchSafetyStockData(),
+        fetchUtilizationData(),
       ])
 
       if (productions.length === 0) {
@@ -338,6 +415,7 @@ export default function AIInsightPage() {
           productData: aggregated.productSummary,
           shipmentData,
           safetyStockData,
+          utilizationData,
         }),
       })
 

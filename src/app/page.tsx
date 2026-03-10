@@ -624,27 +624,29 @@ export default function Dashboard() {
         <div className="text-center py-12 text-gray-500">데이터 로딩 중...</div>
       ) : (
         <>
-          <KPICards
-            {...kpiData}
-            latestDate={latestDate}
-            periodDays={getChartDaysBack()}
-            productionDetails={productionDetails}
-            equipmentDetails={equipmentDetails}
-            workerDetails={workerDetails}
-            defectDetails={defectDetails}
-            lastYearCompareDetails={lastYearCompareDetails}
-            totalEquipmentCount={totalEquipmentCount}
-            factory={factory}
-          />
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DailyTrendChart data={dailyTrendData as any} />
-            <EquipmentProductionChart data={equipmentProductionData as any} />
-            <ProductMixChart data={productMixData as any} />
-            <EquipmentUtilizationChart data={equipmentUtilData as any} dailyData={dailyProductionRaw} equipCapacities={equipCapacities} workingDays={workingDays} />
+          <div className="animate-fade-in-up">
+            <KPICards
+              {...kpiData}
+              latestDate={latestDate}
+              periodDays={getChartDaysBack()}
+              productionDetails={productionDetails}
+              equipmentDetails={equipmentDetails}
+              workerDetails={workerDetails}
+              defectDetails={defectDetails}
+              lastYearCompareDetails={lastYearCompareDetails}
+              totalEquipmentCount={totalEquipmentCount}
+              factory={factory}
+            />
           </div>
 
-          <div className="mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 stagger-children">
+            <div className="card-hover"><DailyTrendChart data={dailyTrendData as any} /></div>
+            <div className="card-hover"><EquipmentProductionChart data={equipmentProductionData as any} /></div>
+            <div className="card-hover"><ProductMixChart data={productMixData as any} /></div>
+            <div className="card-hover"><EquipmentUtilizationChart data={equipmentUtilData as any} dailyData={dailyProductionRaw} equipCapacities={equipCapacities} workingDays={workingDays} /></div>
+          </div>
+
+          <div className="mt-6 animate-fade-in-up card-hover" style={{ animationDelay: '350ms' }}>
             <MonthlyTrendChart data={weeklyTrendData} />
           </div>
         </>

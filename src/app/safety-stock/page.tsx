@@ -85,10 +85,12 @@ function calcUrgency(
   has30dShipment: boolean,
   avgDaily7d: number,
   currentStock: number,
-  safetyStock: number
+  safetyStock: number,
+  has180dShipment: boolean
 ): { urgency: UrgencyLevel; label: string } {
-  // Discontinued: no shipments in 30+ days → not selling anymore
-  if (!has30dShipment && !hasRecentShipment) {
+  // Discontinued: no shipments in 180 days AND stock is low (< 80%)
+  // This gives ~100 products instead of ~285
+  if (!has180dShipment && !has30dShipment && !hasRecentShipment && stockRatio < 80) {
     return { urgency: 'discontinued', label: '판매중단' }
   }
 
@@ -334,7 +336,8 @@ export default function SafetyStockPage() {
 
       const hasRecentShipment = total7d > 0
       const has30dShipment = total30d > 0
-      const { urgency, label } = calcUrgency(stockRatio, daysRemaining, hasRecentShipment, has30dShipment, avgDaily7d, p.current_stock_qty, p.safety_stock_qty)
+      const has180dShipment = total180d > 0
+      const { urgency, label } = calcUrgency(stockRatio, daysRemaining, hasRecentShipment, has30dShipment, avgDaily7d, p.current_stock_qty, p.safety_stock_qty, has180dShipment)
 
       let trend: 'up' | 'down' | 'stable' = 'stable'
       if (avgDaily30d > 0 && avgDaily7d > 0) {
@@ -531,11 +534,10 @@ export default function SafetyStockPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">안전 재고 대시보드</h1>
-        <p className="text-gray-600 mt-2">전체 {analyses.length}개 제품 - 긴급 {urgencyCounts.critical} / 우선 {urgencyCounts.high} / 주의 {urgencyCounts.medium} / 양호 {urgencyCounts.low} / 판매중단 {urgencyCounts.discontinued}</p>
       </div>
 
       {/* KPI Cards - Urgency level counts */}
-      <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 stagger-children">
         <Card
           className={cn("cursor-pointer hover:shadow-lg transition-all", urgencyFilter === 'all' ? "ring-2 ring-blue-400 shadow-md" : "")}
           onClick={() => setUrgencyFilter('all')}
@@ -625,12 +627,6 @@ export default function SafetyStockPage() {
       {/* Filters row: dropdowns then search */}
       <div className="flex items-center gap-2 flex-wrap">
         <Dropdown
-          label="긴급도"
-          value={urgencyFilter}
-          options={URGENCY_FILTER_OPTIONS.map(o => ({ key: o.key, label: o.label, dotColor: o.dotColor }))}
-          onChange={(v) => setUrgencyFilter(v)}
-        />
-        <Dropdown
           label="잔여일수"
           value={daysFilter}
           options={DAYS_FILTER_OPTIONS.map((o, i) => ({ key: String(i), label: o.label }))}
@@ -642,7 +638,7 @@ export default function SafetyStockPage() {
           options={TREND_FILTER_OPTIONS.map(o => ({ key: o.key, label: o.label, dotColor: o.dotColor }))}
           onChange={(v) => setTrendFilter(v)}
         />
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative flex-1 min-w-[150px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
             placeholder="제품명, 제품코드, 설비명 검색..."
@@ -660,6 +656,7 @@ export default function SafetyStockPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-gray-50">
+                  <th className="text-center p-3 font-medium">추세</th>
                   <th className="text-left p-3 font-medium">
                     <button onClick={() => toggleSort('urgency')} className="flex items-center gap-1 hover:text-blue-600">
                       긴급도 <SortIcon field="urgency" />
@@ -703,7 +700,6 @@ export default function SafetyStockPage() {
                       잔여일수 <SortIcon field="daysRemaining" />
                     </button>
                   </th>
-                  <th className="text-center p-3 font-medium">추세</th>
                 </tr>
               </thead>
               <tbody>
@@ -716,6 +712,11 @@ export default function SafetyStockPage() {
                     )}
                     onClick={() => openDetail(a)}
                   >
+                    <td className="p-3 text-center">
+                      {a.trend === 'up' && <TrendingUp className="h-4 w-4 text-red-500 mx-auto" />}
+                      {a.trend === 'down' && <TrendingDown className="h-4 w-4 text-green-500 mx-auto" />}
+                      {a.trend === 'stable' && <span className="text-gray-400">-</span>}
+                    </td>
                     <td className="p-3">
                       <span className={cn(
                         'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border',
@@ -771,11 +772,6 @@ export default function SafetyStockPage() {
                       )}>
                         {a.daysRemaining >= 999 ? '∞' : `${Math.round(a.daysRemaining)}일`}
                       </span>
-                    </td>
-                    <td className="p-3 text-center">
-                      {a.trend === 'up' && <TrendingUp className="h-4 w-4 text-red-500 mx-auto" />}
-                      {a.trend === 'down' && <TrendingDown className="h-4 w-4 text-green-500 mx-auto" />}
-                      {a.trend === 'stable' && <span className="text-gray-400">-</span>}
                     </td>
                   </tr>
                 ))}

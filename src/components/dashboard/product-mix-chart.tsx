@@ -58,9 +58,10 @@ export function ProductMixChart({ data }: ProductMixChartProps) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">제품별 생산 비율 (상위 10)</CardTitle>
+          <p className="text-xs text-gray-500 mt-1">생산량 기준 상위 10개 제품 · 클릭하면 해당 제품의 일별 상세를 볼 수 있습니다</p>
         </CardHeader>
         <CardContent>
-          <div>
+          <div className="overflow-x-auto">
             <Table className="text-sm">
               <TableHeader>
                 <TableRow className="bg-gray-50">

@@ -26,9 +26,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
   ComposedChart,
   Line,
 } from 'recharts'
@@ -489,7 +486,7 @@ export default function ShipmentDashboardPage() {
             />
           </div>
         </div>
-        <div className="flex gap-4 flex-wrap">
+        <div className="flex gap-2 sm:gap-4 flex-wrap">
           <MultiSelect
             label="고객사"
             options={availableCustomers}
@@ -506,7 +503,7 @@ export default function ShipmentDashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 stagger-children">
         <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setDetailPopup({ open: true, type: 'totalQty' })}>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -565,15 +562,16 @@ export default function ShipmentDashboardPage() {
       </div>
 
       {/* Daily Trend Chart */}
-      <Card>
+      <Card className="card-hover animate-fade-in-up" style={{ animationDelay: '100ms' }}>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Calendar className="h-4 w-4" />
             일별 출하 추세 (고객사별)
           </CardTitle>
+          <p className="text-xs text-gray-500 mt-1">일자별 고객사 출하량 스택 바 차트 및 합계 추세선</p>
         </CardHeader>
         <CardContent>
-          <div className="h-80">
+          <div className="h-64 md:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={dailyTrendData.data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -611,8 +609,8 @@ export default function ShipmentDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Customer Qty Bar + Revenue Pie (2 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Customer Qty Bar + Revenue Bar (2 cols) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 stagger-children">
         {/* Customer Bar Chart (clickable) */}
         <Card>
           <CardHeader>
@@ -620,6 +618,7 @@ export default function ShipmentDashboardPage() {
               <Users className="h-4 w-4" />
               고객사별 출하량
             </CardTitle>
+            <p className="text-xs text-gray-500 mt-1">고객사별 총 출하 수량 비교</p>
           </CardHeader>
           <CardContent>
             <div className="h-72">
@@ -647,48 +646,51 @@ export default function ShipmentDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Customer Revenue Pie Chart */}
+        {/* Customer Revenue Bar Chart */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
               고객사별 출하 비중 (매출액)
             </CardTitle>
+            <p className="text-xs text-gray-500 mt-1">고객사별 매출액 합계 (출하량 × 단가)</p>
           </CardHeader>
           <CardContent>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={customerRevenueData}
-                    dataKey="revenue"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={true}
-                  >
-                    {customerRevenueData.map((_, i) => (
-                      <Cell key={i} fill={CUSTOMER_COLORS[i % CUSTOMER_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => [formatNumber(Math.round(value as number)), '매출액']} />
-                </PieChart>
+                <BarChart
+                  data={customerRevenueData}
+                  layout="vertical"
+                  margin={{ top: 0, right: 10, left: 0, bottom: 0 }}
+                  onClick={(e) => {
+                    if (e && e.activeLabel) {
+                      setDetailPopup({ open: true, type: 'customerBar', customerName: e.activeLabel })
+                    }
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => formatNumber(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
+                  <Tooltip formatter={(value: number) => [formatNumber(Math.round(value)), '매출액']} />
+                  <Bar dataKey="revenue" fill="#f97316" radius={[0, 4, 4, 0]} name="매출액" />
+                </BarChart>
               </ResponsiveContainer>
             </div>
+            <p className="text-xs text-gray-400 mt-2 text-center">클릭하면 해당 고객사의 제품별 상세를 볼 수 있습니다</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Top Products + Customer-Product matrix */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 stagger-children">
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Package className="h-4 w-4" />
               출하량 상위 제품 (Top 10)
             </CardTitle>
+            <p className="text-xs text-gray-500 mt-1">기간 내 출하량 기준 상위 10개 제품</p>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -722,6 +724,7 @@ export default function ShipmentDashboardPage() {
               <BarChart3 className="h-4 w-4" />
               고객사 × 제품 출하 현황
             </CardTitle>
+            <p className="text-xs text-gray-500 mt-1">상위 5개 고객사 × 상위 8개 제품 교차 분석</p>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">

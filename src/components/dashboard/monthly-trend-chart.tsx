@@ -28,9 +28,10 @@ export function MonthlyTrendChart({ data }: WeeklyTrendChartProps) {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">주별 생산량 트렌드</CardTitle>
+        <p className="text-xs text-gray-500 mt-1">주(week) 단위 총 생산량 추이 · 생산 증감 패턴을 파악할 수 있습니다</p>
       </CardHeader>
       <CardContent>
-        <div className="w-full h-80">
+        <div className="w-full h-64 md:h-80">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />

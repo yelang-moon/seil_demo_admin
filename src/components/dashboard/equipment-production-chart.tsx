@@ -72,9 +72,10 @@ export function EquipmentProductionChart({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">설비별 생산량</CardTitle>
+          <p className="text-xs text-gray-500 mt-1">설비별 기간 내 총 생산량 비교 · 클릭하면 해당 설비의 제품별 상세를 볼 수 있습니다</p>
         </CardHeader>
         <CardContent>
-          <div className="w-full h-80">
+          <div className="w-full h-64 md:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}

@@ -170,6 +170,7 @@ export function EquipmentUtilizationChart({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">설비 가동률</CardTitle>
+          <p className="text-xs text-gray-500 mt-1">실제 가동일 기준 설비별 가동률 · 클릭하면 일별 가동률 추이를 볼 수 있습니다</p>
         </CardHeader>
         <CardContent>
           {filteredData.length === 0 ? (
