@@ -332,184 +332,288 @@ export default function ProductionReport() {
         {loading ? (
           <div className="text-center py-12 text-gray-500">데이터 로딩 중...</div>
         ) : reportData ? (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="overflow-x-auto">
-                <Table className="text-sm">
-                  <TableHeader>
-                    <TableRow className="bg-gray-100">
-                      <TableHead className="h-12">NO</TableHead>
-                      <TableHead className="h-12">설비명</TableHead>
-                      <TableHead className="h-12">생산품명</TableHead>
-                      <TableHead className="h-12 text-right">
-                        기준수량
-                        <br />
-                        (1일8시간)
-                      </TableHead>
-                      <TableHead className="h-12 text-right">생산수량</TableHead>
-                      <TableHead className="h-12 text-right">가동율</TableHead>
-                      <TableHead className="h-12">작업시간(시작)</TableHead>
-                      <TableHead className="h-12">작업시간(종료)</TableHead>
-                      <TableHead className="h-12 text-right">
-                        작업시간
-                        <br />
-                        (분)
-                      </TableHead>
-                      <TableHead className="h-12 text-right">불량수량</TableHead>
-                      <TableHead className="h-12 text-right">불량율</TableHead>
-                      <TableHead className="h-12">기술자</TableHead>
-                      <TableHead className="h-12">포장1</TableHead>
-                      <TableHead className="h-12">포장2</TableHead>
-                      <TableHead className="h-12">비고</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {/* 가동 설비 (위쪽) */}
-                    {reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).map((row, idx) => {
-                      const finishedQty = row.finished_qty || 0
-                      const maxQty = row.daily_max_qty || 0
-                      const utilRate =
-                        maxQty > 0 ? finishedQty / maxQty : 0
-                      const defectQty = row.defect_qty || 0
-                      const defectRate =
-                        (row.finished_qty || 0) > 0
-                          ? defectQty / (row.finished_qty || 1)
-                          : 0
-                      const packWorkers = row.pack_workers
-                        ? row.pack_workers.split(/[,/]/)
-                        : ["-", "-"]
-
-                      return (
-                        <TableRow key={idx} className="border-b hover:bg-gray-50">
-                          <TableCell className="w-10 text-right">
-                            {idx + 1}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <EquipmentNameTooltip name={row.equipment_name || "-"} />
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            <ProductNameTooltip name={row.product_name || "-"} />
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {maxQty > 0 ? formatNumber(maxQty) : "-"}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold">
-                            {finishedQty > 0
-                              ? formatNumber(finishedQty)
-                              : "-"}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              "text-right font-semibold",
-                              getUtilColor(finishedQty, maxQty)
-                            )}
-                          >
-                            {maxQty > 0 ? formatPercent(utilRate) : "-"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {row.work_start_hhmm || "-"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {row.work_end_hhmm || "-"}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {row.work_minutes || "-"}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {defectQty > 0 ? formatNumber(defectQty) : "-"}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {(row.finished_qty || 0) > 0
-                              ? formatPercent(defectRate)
-                              : "-"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {row.tech_worker || "-"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {packWorkers[0] || "-"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {packWorkers[1] || "-"}
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            {row.note || "-"}
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                    {/* 구분선: 미가동 설비 */}
-                    {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).length > 0 && (
-                      <TableRow className="bg-gray-200">
-                        <TableCell colSpan={15} className="text-center text-xs font-semibold text-gray-500 py-1">
-                          ── 미가동 설비 ──
-                        </TableCell>
+          <>
+            {/* Desktop Table */}
+            <Card className="hidden md:block">
+              <CardContent className="pt-6">
+                <div className="overflow-x-auto">
+                  <Table className="text-sm" style={{ minWidth: '1100px' }}>
+                    <TableHeader>
+                      <TableRow className="bg-gray-100">
+                        <TableHead className="h-12 whitespace-nowrap">NO</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">설비명</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">생산품명</TableHead>
+                        <TableHead className="h-12 text-right whitespace-nowrap">
+                          기준수량
+                          <br />
+                          (1일8시간)
+                        </TableHead>
+                        <TableHead className="h-12 text-right whitespace-nowrap">생산수량</TableHead>
+                        <TableHead className="h-12 text-right whitespace-nowrap">가동율</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">시작</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">종료</TableHead>
+                        <TableHead className="h-12 text-right whitespace-nowrap">
+                          가동분
+                        </TableHead>
+                        <TableHead className="h-12 text-right whitespace-nowrap">불량수량</TableHead>
+                        <TableHead className="h-12 text-right whitespace-nowrap">불량율</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">기술자</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">포장1</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">포장2</TableHead>
+                        <TableHead className="h-12 whitespace-nowrap">비고</TableHead>
                       </TableRow>
-                    )}
-                    {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).map((row, idx) => {
-                      const finishedQty = row.finished_qty || 0
-                      const maxQty = row.daily_max_qty || 0
-                      const utilRate = maxQty > 0 ? finishedQty / maxQty : 0
-                      const defectQty = row.defect_qty || 0
-                      const defectRate = (row.finished_qty || 0) > 0 ? defectQty / (row.finished_qty || 1) : 0
-                      const packWorkers = row.pack_workers ? row.pack_workers.split(/[,/]/) : ["-", "-"]
-                      const operatingCount = reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).length
+                    </TableHeader>
+                    <TableBody>
+                      {/* 가동 설비 (위쪽) */}
+                      {reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).map((row, idx) => {
+                        const finishedQty = row.finished_qty || 0
+                        const maxQty = row.daily_max_qty || 0
+                        const utilRate =
+                          maxQty > 0 ? finishedQty / maxQty : 0
+                        const defectQty = row.defect_qty || 0
+                        const defectRate =
+                          (row.finished_qty || 0) > 0
+                            ? defectQty / (row.finished_qty || 1)
+                            : 0
+                        const packWorkers = row.pack_workers
+                          ? row.pack_workers.split(/[,/]/)
+                          : ["-", "-"]
 
-                      return (
-                        <TableRow key={`idle-${idx}`} className="border-b hover:bg-gray-50 bg-gray-50 opacity-60">
-                          <TableCell className="w-10 text-right">{operatingCount + idx + 1}</TableCell>
-                          <TableCell className="font-medium"><EquipmentNameTooltip name={row.equipment_name || "-"} /></TableCell>
-                          <TableCell className="text-sm"><ProductNameTooltip name={row.product_name || "-"} /></TableCell>
-                          <TableCell className="text-right text-sm">{maxQty > 0 ? formatNumber(maxQty) : "-"}</TableCell>
-                          <TableCell className="text-right font-semibold">{finishedQty > 0 ? formatNumber(finishedQty) : "-"}</TableCell>
-                          <TableCell className={cn("text-right font-semibold", getUtilColor(finishedQty, maxQty))}>{maxQty > 0 ? formatPercent(utilRate) : "-"}</TableCell>
-                          <TableCell className="text-sm">{row.work_start_hhmm || "-"}</TableCell>
-                          <TableCell className="text-sm">{row.work_end_hhmm || "-"}</TableCell>
-                          <TableCell className="text-right text-sm">{row.work_minutes || "-"}</TableCell>
-                          <TableCell className="text-right text-sm">{defectQty > 0 ? formatNumber(defectQty) : "-"}</TableCell>
-                          <TableCell className="text-right text-sm">{(row.finished_qty || 0) > 0 ? formatPercent(defectRate) : "-"}</TableCell>
-                          <TableCell className="text-sm">{row.tech_worker || "-"}</TableCell>
-                          <TableCell className="text-sm">{packWorkers[0] || "-"}</TableCell>
-                          <TableCell className="text-sm">{packWorkers[1] || "-"}</TableCell>
-                          <TableCell className="text-sm">{row.note || "-"}</TableCell>
+                        return (
+                          <TableRow key={idx} className="border-b hover:bg-gray-50">
+                            <TableCell className="w-10 text-right">
+                              {idx + 1}
+                            </TableCell>
+                            <TableCell className="font-medium whitespace-nowrap">
+                              <EquipmentNameTooltip name={row.equipment_name || "-"} />
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <ProductNameTooltip name={row.product_name || "-"} />
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {maxQty > 0 ? formatNumber(maxQty) : "-"}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {finishedQty > 0
+                                ? formatNumber(finishedQty)
+                                : "-"}
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                "text-right font-semibold",
+                                getUtilColor(finishedQty, maxQty)
+                              )}
+                            >
+                              {maxQty > 0 ? formatPercent(utilRate) : "-"}
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {row.work_start_hhmm || "-"}
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {row.work_end_hhmm || "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {row.work_minutes || "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {defectQty > 0 ? formatNumber(defectQty) : "-"}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {(row.finished_qty || 0) > 0
+                                ? formatPercent(defectRate)
+                                : "-"}
+                            </TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">
+                              {row.tech_worker || "-"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {packWorkers[0] || "-"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {packWorkers[1] || "-"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              {row.note || "-"}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                      {/* 구분선: 미가동 설비 */}
+                      {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).length > 0 && (
+                        <TableRow className="bg-gray-200">
+                          <TableCell colSpan={15} className="text-center text-xs font-semibold text-gray-500 py-1">
+                            ── 미가동 설비 ──
+                          </TableCell>
                         </TableRow>
-                      )
-                    })}
-                    {/* Total Row */}
-                    <TableRow className="bg-gray-100 font-bold">
-                      <TableCell colSpan={2}>합계</TableCell>
-                      <TableCell></TableCell>
-                      <TableCell className="text-right">-</TableCell>
-                      <TableCell className="text-right">
-                        {formatNumber(reportData.totals.finished_qty)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {reportData.totals.produced_qty > 0
-                          ? formatPercent(
-                              reportData.totals.finished_qty /
-                                reportData.totals.produced_qty
-                            )
-                          : "-"}
-                      </TableCell>
-                      <TableCell colSpan={3}></TableCell>
-                      <TableCell className="text-right">
-                        {formatNumber(reportData.totals.defect_qty)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {reportData.totals.produced_qty > 0
-                          ? formatPercent(
-                              reportData.totals.defect_qty /
-                                reportData.totals.produced_qty
-                            )
-                          : "-"}
-                      </TableCell>
-                      <TableCell colSpan={4}></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+                      )}
+                      {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).map((row, idx) => {
+                        const finishedQty = row.finished_qty || 0
+                        const maxQty = row.daily_max_qty || 0
+                        const utilRate = maxQty > 0 ? finishedQty / maxQty : 0
+                        const defectQty = row.defect_qty || 0
+                        const defectRate = (row.finished_qty || 0) > 0 ? defectQty / (row.finished_qty || 1) : 0
+                        const packWorkers = row.pack_workers ? row.pack_workers.split(/[,/]/) : ["-", "-"]
+                        const operatingCount = reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).length
+
+                        return (
+                          <TableRow key={`idle-${idx}`} className="border-b hover:bg-gray-50 bg-gray-50 opacity-60">
+                            <TableCell className="w-10 text-right">{operatingCount + idx + 1}</TableCell>
+                            <TableCell className="font-medium whitespace-nowrap"><EquipmentNameTooltip name={row.equipment_name || "-"} /></TableCell>
+                            <TableCell className="text-sm"><ProductNameTooltip name={row.product_name || "-"} /></TableCell>
+                            <TableCell className="text-right text-sm">{maxQty > 0 ? formatNumber(maxQty) : "-"}</TableCell>
+                            <TableCell className="text-right font-semibold">{finishedQty > 0 ? formatNumber(finishedQty) : "-"}</TableCell>
+                            <TableCell className={cn("text-right font-semibold", getUtilColor(finishedQty, maxQty))}>{maxQty > 0 ? formatPercent(utilRate) : "-"}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{row.work_start_hhmm || "-"}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{row.work_end_hhmm || "-"}</TableCell>
+                            <TableCell className="text-right text-sm">{row.work_minutes || "-"}</TableCell>
+                            <TableCell className="text-right text-sm">{defectQty > 0 ? formatNumber(defectQty) : "-"}</TableCell>
+                            <TableCell className="text-right text-sm">{(row.finished_qty || 0) > 0 ? formatPercent(defectRate) : "-"}</TableCell>
+                            <TableCell className="text-sm whitespace-nowrap">{row.tech_worker || "-"}</TableCell>
+                            <TableCell className="text-sm">{packWorkers[0] || "-"}</TableCell>
+                            <TableCell className="text-sm">{packWorkers[1] || "-"}</TableCell>
+                            <TableCell className="text-sm">{row.note || "-"}</TableCell>
+                          </TableRow>
+                        )
+                      })}
+                      {/* Total Row */}
+                      <TableRow className="bg-gray-100 font-bold">
+                        <TableCell colSpan={2}>합계</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell className="text-right">-</TableCell>
+                        <TableCell className="text-right">
+                          {formatNumber(reportData.totals.finished_qty)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {reportData.totals.produced_qty > 0
+                            ? formatPercent(
+                                reportData.totals.finished_qty /
+                                  reportData.totals.produced_qty
+                              )
+                            : "-"}
+                        </TableCell>
+                        <TableCell colSpan={3}></TableCell>
+                        <TableCell className="text-right">
+                          {formatNumber(reportData.totals.defect_qty)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {reportData.totals.produced_qty > 0
+                            ? formatPercent(
+                                reportData.totals.defect_qty /
+                                  reportData.totals.produced_qty
+                              )
+                            : "-"}
+                        </TableCell>
+                        <TableCell colSpan={4}></TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Mobile Card Layout */}
+            <div className="md:hidden space-y-2">
+              {/* Summary card */}
+              <Card className="bg-gray-50">
+                <CardContent className="py-3 px-4">
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div>
+                      <div className="text-[10px] text-gray-500">총 생산수량</div>
+                      <div className="text-base font-bold">{formatNumber(reportData.totals.finished_qty)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-500">불량수량</div>
+                      <div className="text-base font-bold text-red-600">{formatNumber(reportData.totals.defect_qty)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-500">가동 설비</div>
+                      <div className="text-base font-bold text-blue-600">
+                        {reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).length}
+                        <span className="text-xs text-gray-400 font-normal">/{reportData.rows.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Operating equipment cards */}
+              {reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).map((row, idx) => {
+                const finishedQty = row.finished_qty || 0
+                const maxQty = row.daily_max_qty || 0
+                const utilRate = maxQty > 0 ? finishedQty / maxQty : 0
+                const defectQty = row.defect_qty || 0
+                const defectRate = (row.finished_qty || 0) > 0 ? defectQty / (row.finished_qty || 1) : 0
+
+                return (
+                  <Card key={idx}>
+                    <CardContent className="p-3">
+                      {/* Row 1: Equipment name + Utilization badge */}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400 tabular-nums w-5">{idx + 1}</span>
+                          <span className="font-semibold text-sm">{row.equipment_name || '-'}</span>
+                        </div>
+                        <span className={cn(
+                          'text-xs font-bold px-2 py-0.5 rounded',
+                          utilRate >= 0.9 ? 'bg-green-100 text-green-700' :
+                          utilRate >= 0.7 ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        )}>
+                          {maxQty > 0 ? formatPercent(utilRate) : '-'}
+                        </span>
+                      </div>
+                      {/* Row 2: Product name */}
+                      <div className="text-xs text-gray-500 mb-2 leading-tight pl-7">{row.product_name || '-'}</div>
+                      {/* Row 3: Key metrics */}
+                      <div className="grid grid-cols-4 gap-1 text-center pl-7">
+                        <div>
+                          <div className="text-[10px] text-gray-400">기준</div>
+                          <div className="text-xs font-medium tabular-nums">{maxQty > 0 ? formatNumber(maxQty) : '-'}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400">생산</div>
+                          <div className="text-xs font-bold tabular-nums">{finishedQty > 0 ? formatNumber(finishedQty) : '-'}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400">불량</div>
+                          <div className={cn("text-xs font-medium tabular-nums", defectQty > 0 ? "text-red-600" : "")}>{defectQty > 0 ? formatNumber(defectQty) : '-'}</div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] text-gray-400">시간</div>
+                          <div className="text-xs font-medium tabular-nums">{row.work_start_hhmm && row.work_end_hhmm ? `${row.work_start_hhmm}-${row.work_end_hhmm}` : '-'}</div>
+                        </div>
+                      </div>
+                      {/* Row 4: Workers (if any) */}
+                      {(row.tech_worker || row.pack_workers) && (
+                        <div className="text-[10px] text-gray-400 mt-1.5 pl-7">
+                          {row.tech_worker && <span>기술: {row.tech_worker}</span>}
+                          {row.tech_worker && row.pack_workers && <span> · </span>}
+                          {row.pack_workers && <span>포장: {row.pack_workers}</span>}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+
+              {/* Idle equipment section */}
+              {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).length > 0 && (
+                <>
+                  <div className="text-center text-xs text-gray-400 py-1">── 미가동 설비 ──</div>
+                  <div className="space-y-1">
+                    {reportData.rows.filter(r => !r.finished_qty || r.finished_qty === 0).map((row, idx) => (
+                      <div key={`idle-${idx}`} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg opacity-60 text-sm">
+                        <span className="text-xs text-gray-400 tabular-nums w-5">
+                          {reportData.rows.filter(r => r.finished_qty !== null && (r.finished_qty || 0) > 0).length + idx + 1}
+                        </span>
+                        <span className="text-gray-500">{row.equipment_name || '-'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </>
         ) : (
           <div className="text-center py-12 text-gray-500">
             데이터를 선택해주세요

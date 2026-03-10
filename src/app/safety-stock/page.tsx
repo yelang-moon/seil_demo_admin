@@ -649,53 +649,53 @@ export default function SafetyStockPage() {
         </div>
       </div>
 
-      {/* Product Table */}
-      <Card>
+      {/* Product Table - Desktop */}
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" style={{ minWidth: '1000px' }}>
               <thead>
                 <tr className="border-b bg-gray-50">
-                  <th className="text-center p-3 font-medium">추세</th>
-                  <th className="text-left p-3 font-medium">
+                  <th className="text-center p-3 font-medium whitespace-nowrap">추세</th>
+                  <th className="text-left p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('urgency')} className="flex items-center gap-1 hover:text-blue-600">
                       긴급도 <SortIcon field="urgency" />
                     </button>
                   </th>
-                  <th className="text-left p-3 font-medium">
+                  <th className="text-left p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('product_name')} className="flex items-center gap-1 hover:text-blue-600">
                       제품명 <SortIcon field="product_name" />
                     </button>
                   </th>
-                  <th className="text-left p-3 font-medium">
+                  <th className="text-left p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('equipment_name')} className="flex items-center gap-1 hover:text-blue-600">
                       설비 <SortIcon field="equipment_name" />
                     </button>
                   </th>
-                  <th className="text-right p-3 font-medium">안전재고</th>
-                  <th className="text-right p-3 font-medium">현재재고</th>
-                  <th className="text-right p-3 font-medium">
+                  <th className="text-right p-3 font-medium whitespace-nowrap">안전재고</th>
+                  <th className="text-right p-3 font-medium whitespace-nowrap">현재재고</th>
+                  <th className="text-right p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('stockRatio')} className="flex items-center gap-1 justify-end hover:text-blue-600">
                       재고율 <SortIcon field="stockRatio" />
                     </button>
                   </th>
-                  <th className="text-right p-3 font-medium">
+                  <th className="text-right p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('shipments7d')} className="flex items-center gap-1 justify-end hover:text-blue-600">
                       7일 출하 <SortIcon field="shipments7d" />
                     </button>
                   </th>
-                  <th className="text-right p-3 font-medium">
+                  <th className="text-right p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('shipments30d')} className="flex items-center gap-1 justify-end hover:text-blue-600">
                       30일 출하 <SortIcon field="shipments30d" />
                     </button>
                   </th>
-                  <th className="text-right p-3 font-medium">
+                  <th className="text-right p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('shipments180d')} className="flex items-center gap-1 justify-end hover:text-blue-600">
                       6개월 출하 <SortIcon field="shipments180d" />
                     </button>
                   </th>
-                  <th className="text-right p-3 font-medium">일평균 출하</th>
-                  <th className="text-right p-3 font-medium">
+                  <th className="text-right p-3 font-medium whitespace-nowrap">일평균 출하</th>
+                  <th className="text-right p-3 font-medium whitespace-nowrap">
                     <button onClick={() => toggleSort('daysRemaining')} className="flex items-center gap-1 justify-end hover:text-blue-600">
                       잔여일수 <SortIcon field="daysRemaining" />
                     </button>
@@ -719,7 +719,7 @@ export default function SafetyStockPage() {
                     </td>
                     <td className="p-3">
                       <span className={cn(
-                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border',
+                        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap',
                         URGENCY_COLORS[a.urgency]
                       )}>
                         <span className={cn('w-1.5 h-1.5 rounded-full', URGENCY_DOT[a.urgency])} />
@@ -730,7 +730,7 @@ export default function SafetyStockPage() {
                       <div className="font-medium">{a.product.product_name}</div>
                       <div className="text-xs text-gray-400">{a.product.product_code}</div>
                     </td>
-                    <td className="p-3 text-sm text-gray-600">{a.product.equipment_name || '-'}</td>
+                    <td className="p-3 text-sm text-gray-600 whitespace-nowrap">{a.product.equipment_name || '-'}</td>
                     <td className="p-3 text-right tabular-nums">{formatNumber(a.product.safety_stock_qty)}</td>
                     <td className="p-3 text-right tabular-nums">{formatNumber(a.product.current_stock_qty)}</td>
                     <td className="p-3 text-right">
@@ -790,6 +790,105 @@ export default function SafetyStockPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Product Cards - Mobile */}
+      <div className="md:hidden space-y-2">
+        {displayed.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center text-gray-500">
+              {search || urgencyFilter !== 'all' || daysFilter !== '0' || trendFilter !== 'all' ? '검색 결과가 없습니다.' : '데이터가 없습니다.'}
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            <p className="text-xs text-gray-500 px-1">총 {displayed.length}개 제품 · 카드를 터치하면 상세 정보를 볼 수 있습니다</p>
+            {displayed.map((a) => (
+              <Card
+                key={a.product.id}
+                className={cn(
+                  'cursor-pointer active:bg-gray-50 transition-colors',
+                  a.urgency === 'discontinued' && 'opacity-50'
+                )}
+                onClick={() => openDetail(a)}
+              >
+                <CardContent className="p-3">
+                  {/* Row 1: Urgency badge + Trend + Days remaining */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border',
+                        URGENCY_COLORS[a.urgency]
+                      )}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full', URGENCY_DOT[a.urgency])} />
+                        {a.urgencyLabel}
+                      </span>
+                      {a.trend === 'up' && <TrendingUp className="h-3.5 w-3.5 text-red-500" />}
+                      {a.trend === 'down' && <TrendingDown className="h-3.5 w-3.5 text-green-500" />}
+                    </div>
+                    <span className={cn(
+                      'text-sm font-semibold tabular-nums',
+                      a.daysRemaining < 3 ? 'text-red-600' :
+                      a.daysRemaining < 7 ? 'text-orange-600' :
+                      a.daysRemaining < 14 ? 'text-yellow-600' :
+                      'text-gray-600'
+                    )}>
+                      {a.daysRemaining >= 999 ? '∞' : `${Math.round(a.daysRemaining)}일`}
+                    </span>
+                  </div>
+                  {/* Row 2: Product name + equipment */}
+                  <div className="mb-2">
+                    <div className="font-medium text-sm leading-tight">{a.product.product_name}</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{a.product.equipment_name || '-'} · {a.product.product_code}</div>
+                  </div>
+                  {/* Row 3: Stock ratio bar */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          'h-full rounded-full transition-all',
+                          a.stockRatio < 50 ? 'bg-red-500' :
+                          a.stockRatio < 80 ? 'bg-orange-500' :
+                          a.stockRatio < 100 ? 'bg-yellow-500' :
+                          'bg-green-500'
+                        )}
+                        style={{ width: `${Math.min(a.stockRatio, 100)}%` }}
+                      />
+                    </div>
+                    <span className={cn(
+                      'text-xs font-semibold tabular-nums w-10 text-right',
+                      a.stockRatio < 50 ? 'text-red-600' :
+                      a.stockRatio < 80 ? 'text-orange-600' :
+                      a.stockRatio < 100 ? 'text-yellow-600' :
+                      'text-green-600'
+                    )}>
+                      {a.stockRatio.toFixed(0)}%
+                    </span>
+                  </div>
+                  {/* Row 4: Key numbers */}
+                  <div className="grid grid-cols-4 gap-1 text-center">
+                    <div>
+                      <div className="text-[10px] text-gray-400">안전재고</div>
+                      <div className="text-xs font-medium tabular-nums">{formatNumber(a.product.safety_stock_qty)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">현재재고</div>
+                      <div className="text-xs font-medium tabular-nums">{formatNumber(a.product.current_stock_qty)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">30일 출하</div>
+                      <div className="text-xs font-medium tabular-nums">{formatNumber(a.shipments30d)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400">일평균</div>
+                      <div className="text-xs font-medium tabular-nums">{a.avgDaily7d > 0 ? formatNumber(Math.round(a.avgDaily7d)) : '-'}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
+      </div>
 
       {/* Detail Dialog */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
