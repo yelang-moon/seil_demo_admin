@@ -266,6 +266,18 @@ export default function ChannelAnalysisPage() {
         </div>
       </div>
 
+      {/* 가치 설명 */}
+      <Card className="bg-gradient-to-r from-indigo-50 to-white border-indigo-100">
+        <CardContent className="p-4">
+          <p className="text-sm text-gray-700 leading-relaxed">
+            <strong className="text-indigo-700">어디서 얼마나 팔리는지, 한눈에.</strong>{' '}
+            쿠팡·네이버·11번가 등 마켓플레이스별 매출 비중과 추이를 분석하여
+            채널 집중도 리스크(HHI)를 진단합니다. 특정 채널 의존도가 높으면 정책 변경 시 매출 급감 위험이 있으므로,
+            채널 다각화 전략 수립에 활용할 수 있습니다.
+          </p>
+        </CardContent>
+      </Card>
+
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />

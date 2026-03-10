@@ -235,6 +235,17 @@ export default function FactoryMonitorPage() {
         </Button>
       </div>
 
+      {/* Value Proposition */}
+      <Card className="bg-gradient-to-r from-emerald-50 to-white border-emerald-100">
+        <CardContent className="p-4">
+          <p className="text-sm text-gray-700 leading-relaxed">
+            <strong className="text-emerald-700">공장 전체를 한 화면으로.</strong>{' '}
+            기존에는 현장을 직접 돌아봐야 알 수 있던 설비 상태를 디지털로 확인합니다.
+            어떤 설비가 가동 중인지, 무슨 제품을 생산 중인지, 가동률과 불량은 어떤지 — 사무실에서, 외부에서도 실시간으로 파악할 수 있습니다.
+          </p>
+        </CardContent>
+      </Card>
+
       {loading && !kpi ? (
         <div className="flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
