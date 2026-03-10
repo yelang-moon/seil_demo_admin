@@ -14,6 +14,8 @@ import {
   Database,
   ChevronDown,
   ChevronRight,
+  ShieldAlert,
+  Truck,
 } from "lucide-react"
 import { useState } from "react"
 import { useFactory, FactoryType } from "@/contexts/factory-context"
@@ -33,6 +35,7 @@ const navItems: NavItem[] = [
       { label: "메인 대시보드", href: "/", icon: <LayoutDashboard className="h-4 w-4" /> },
       { label: "일보 (일일보고)", href: "/daily-report", icon: <FileText className="h-4 w-4" /> },
       { label: "생산보고", href: "/production-report", icon: <ClipboardList className="h-4 w-4" /> },
+      { label: "안전 재고 대시보드", href: "/safety-stock", icon: <ShieldAlert className="h-4 w-4" /> },
       { label: "AI 인사이트", href: "/ai-insight", icon: <Bot className="h-4 w-4" /> },
     ],
   },
@@ -42,6 +45,7 @@ const navItems: NavItem[] = [
     children: [
       { label: "장비 관리", href: "/admin/equipment", icon: <Factory className="h-4 w-4" /> },
       { label: "제품 관리", href: "/admin/products", icon: <Package className="h-4 w-4" /> },
+      { label: "출하량 관리", href: "/admin/shipments", icon: <Truck className="h-4 w-4" /> },
       { label: "ERP 제품표", href: "/admin/erp-items", icon: <Database className="h-4 w-4" /> },
       { label: "생산기록 관리", href: "/admin/production", icon: <ClipboardList className="h-4 w-4" /> },
     ],

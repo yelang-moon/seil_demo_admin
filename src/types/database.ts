@@ -18,7 +18,22 @@ export interface Product {
   equipment_name: string | null
   raw_material: string | null
   daily_max_qty: number | null
+  safety_stock_qty: number | null
+  current_stock_qty: number | null
   factory: string | null
+}
+
+export interface Shipment {
+  id: number
+  shipment_date: string | null
+  product_code: string | null
+  product_name: string | null
+  equipment_name: string | null
+  shipped_qty: number | null
+  customer_name: string | null
+  order_number: string | null
+  factory: string | null
+  note: string | null
 }
 
 export interface ErpItem {
