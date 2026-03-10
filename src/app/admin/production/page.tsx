@@ -167,9 +167,10 @@ export default function ProductionPage() {
       const lastRecord = productions[0]
       if (lastRecord) {
         const today = getTodayDate()
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id: _id, ...rest } = lastRecord
         setFormData({
-          ...lastRecord,
-          id: undefined,
+          ...rest,
           production_date: today,
           year_month: getYearMonth(today),
         })
@@ -187,10 +188,12 @@ export default function ProductionPage() {
     }
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, ...saveData } = formData as any
       if (editingItem) {
         const { error } = await supabase
           .from('fact_production')
-          .update(formData)
+          .update(saveData)
           .eq('id', editingItem.id)
 
         if (error) throw error
@@ -198,7 +201,7 @@ export default function ProductionPage() {
       } else {
         const { error } = await supabase
           .from('fact_production')
-          .insert([formData])
+          .insert([saveData])
 
         if (error) throw error
         window.alert('생산 기록이 추가되었습니다.')
@@ -286,7 +289,7 @@ export default function ProductionPage() {
                   <div className="p-2 space-y-1 max-h-48 overflow-y-auto">
                     {products.map((product) => (
                       <button
-                        key={product.product_code}
+                        key={product.id}
                         onClick={() => handleProductSelect(product)}
                         className={cn(
                           'w-full text-left px-2 py-2 rounded text-sm flex items-center gap-2 hover:bg-gray-100',
@@ -350,27 +353,36 @@ export default function ProductionPage() {
                     >
                       (없음)
                     </button>
-                    {equipment.map((equip) => (
-                      <button
-                        key={equip.equipment_id}
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            equipment_name: equip.name_official || equip.name_legacy || '',
-                          })
-                          setEquipmentOpen(false)
-                        }}
-                        className={cn(
-                          'w-full text-left px-2 py-2 rounded text-sm flex items-center gap-2 hover:bg-gray-100',
-                          formData.equipment_name === (equip.name_official || equip.name_legacy) && 'bg-blue-100'
-                        )}
-                      >
-                        {formData.equipment_name === (equip.name_official || equip.name_legacy) && (
-                          <Check className="h-4 w-4" />
-                        )}
-                        {equip.name_official || equip.name_legacy || `설비 ${equip.equipment_id}`}
-                      </button>
-                    ))}
+                    {equipment.map((equip) => {
+                      const legacyName = equip.name_legacy || ''
+                      const displayName = equip.name_official || equip.name_legacy || `설비 ${equip.equipment_id}`
+                      return (
+                        <button
+                          key={equip.equipment_id}
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              equipment_name: legacyName,
+                            })
+                            setEquipmentOpen(false)
+                          }}
+                          className={cn(
+                            'w-full text-left px-2 py-2 rounded text-sm flex items-center gap-2 hover:bg-gray-100',
+                            formData.equipment_name === legacyName && 'bg-blue-100'
+                          )}
+                        >
+                          {formData.equipment_name === legacyName && (
+                            <Check className="h-4 w-4" />
+                          )}
+                          <div>
+                            <div>{displayName}</div>
+                            {equip.name_official && equip.name_legacy && (
+                              <div className="text-xs text-gray-500">{legacyName}</div>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 </PopoverContent>
               </Popover>

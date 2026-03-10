@@ -165,23 +165,21 @@ export default function DailyReport() {
   }, [selectedDate])
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">일보 (일일보고)</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">일보 (일일보고)</h1>
+      </div>
 
-          {/* Date Picker */}
-          <div className="flex items-center gap-4 mb-6">
-            <label className="text-sm font-medium text-gray-700">날짜:</label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+      {/* Date Picker */}
+      <div className="flex items-center gap-4">
+        <label className="text-sm font-medium text-gray-700">날짜:</label>
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
 
         {loading ? (
           <div className="text-center py-12 text-gray-500">데이터 로딩 중...</div>
@@ -263,7 +261,6 @@ export default function DailyReport() {
             데이터를 선택해주세요
           </div>
         )}
-      </div>
     </div>
   )
 }

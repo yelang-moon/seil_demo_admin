@@ -302,28 +302,25 @@ export default function ProductionReport() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-full mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">생산보고</h1>
-            <Button onClick={downloadCSV} variant="outline">
-              CSV 다운로드
-            </Button>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-3xl font-bold text-gray-900">생산보고</h1>
+        <Button onClick={downloadCSV} variant="outline">
+          CSV 다운로드
+        </Button>
+      </div>
 
-          {/* Date Picker */}
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700">날짜:</label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
+      {/* Date Picker */}
+      <div className="flex items-center gap-4">
+        <label className="text-sm font-medium text-gray-700">날짜:</label>
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
 
         {loading ? (
           <div className="text-center py-12 text-gray-500">데이터 로딩 중...</div>
@@ -473,7 +470,6 @@ export default function ProductionReport() {
             데이터를 선택해주세요
           </div>
         )}
-      </div>
     </div>
   )
 }

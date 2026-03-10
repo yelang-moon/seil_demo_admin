@@ -244,27 +244,36 @@ export default function ProductsPage() {
                     >
                       (없음)
                     </button>
-                    {equipment.map((equip) => (
-                      <button
-                        key={equip.equipment_id}
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            equipment_name: equip.name_official || equip.name_legacy || '',
-                          })
-                          setEquipmentOpen(false)
-                        }}
-                        className={cn(
-                          'w-full text-left px-2 py-2 rounded text-sm flex items-center gap-2 hover:bg-gray-100',
-                          formData.equipment_name === (equip.name_official || equip.name_legacy) && 'bg-blue-100'
-                        )}
-                      >
-                        {formData.equipment_name === (equip.name_official || equip.name_legacy) && (
-                          <Check className="h-4 w-4" />
-                        )}
-                        {equip.name_official || equip.name_legacy || `설비 ${equip.equipment_id}`}
-                      </button>
-                    ))}
+                    {equipment.map((equip) => {
+                      const legacyName = equip.name_legacy || ''
+                      const displayName = equip.name_official || equip.name_legacy || `설비 ${equip.equipment_id}`
+                      return (
+                        <button
+                          key={equip.equipment_id}
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              equipment_name: legacyName,
+                            })
+                            setEquipmentOpen(false)
+                          }}
+                          className={cn(
+                            'w-full text-left px-2 py-2 rounded text-sm flex items-center gap-2 hover:bg-gray-100',
+                            formData.equipment_name === legacyName && 'bg-blue-100'
+                          )}
+                        >
+                          {formData.equipment_name === legacyName && (
+                            <Check className="h-4 w-4" />
+                          )}
+                          <div>
+                            <div>{displayName}</div>
+                            {equip.name_official && equip.name_legacy && (
+                              <div className="text-xs text-gray-500">{legacyName}</div>
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 </PopoverContent>
               </Popover>

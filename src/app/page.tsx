@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { DailyTrendChart } from "@/components/dashboard/daily-trend-chart"
@@ -63,32 +63,26 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<PeriodType>("1month")
   const [latestDate, setLatestDate] = useState<string>("")
   const [kpiData, setKpiData] = useState({
-    todayProduction: 0,
+    latestDayProduction: 0,
     operatingEquipment: 0,
     defectRate: 0,
     monthChange: 0,
+    latestMonthLabel: "",
+    prevMonthLabel: "",
   })
   const [dailyTrendData, setDailyTrendData] = useState<DailyProduction[]>([])
-  const [equipmentProductionData, setEquipmentProductionData] = useState<
-    EquipmentProduction[]
-  >([])
+  const [equipmentProductionData, setEquipmentProductionData] = useState<EquipmentProduction[]>([])
   const [productMixData, setProductMixData] = useState<ProductData[]>([])
-  const [equipmentUtilData, setEquipmentUtilData] = useState<EquipmentUtil[]>(
-    []
-  )
+  const [equipmentUtilData, setEquipmentUtilData] = useState<EquipmentUtil[]>([])
   const [monthlyTrendData, setMonthlyTrendData] = useState<MonthlyData[]>([])
   const [loading, setLoading] = useState(true)
 
   const getDaysBack = (type: PeriodType): number => {
     switch (type) {
-      case "1month":
-        return 30
-      case "3months":
-        return 90
-      case "6months":
-        return 180
-      default:
-        return 30
+      case "1month": return 30
+      case "3months": return 90
+      case "6months": return 180
+      default: return 30
     }
   }
 
@@ -120,16 +114,100 @@ export default function Dashboard() {
     fetchLatestDate()
   }, [])
 
-  const fetchData = async () => {
+  // Fetch KPI data (independent of period, always based on latestDate)
+  const fetchKPIData = useCallback(async () => {
+    if (!latestDate) return
+
+    try {
+      const currentMonth = latestDate.substring(0, 7)
+      const prevMonthDate = new Date(latestDate + "T00:00:00")
+      prevMonthDate.setMonth(prevMonthDate.getMonth() - 1)
+      const prevMonth = prevMonthDate.toISOString().split("T")[0].substring(0, 7)
+
+      // Fetch latest day data
+      const { data: latestDayData } = await supabase
+        .from("fact_production")
+        .select("finished_qty, equipment_name")
+        .eq("production_date", latestDate)
+
+      // Fetch current month data
+      const { data: currentMonthData } = await supabase
+        .from("fact_production")
+        .select("finished_qty, produced_qty, defect_qty")
+        .gte("production_date", currentMonth + "-01")
+        .lte("production_date", latestDate)
+
+      // Fetch previous month data (full month)
+      const prevMonthStart = prevMonth + "-01"
+      const prevMonthEnd = new Date(
+        parseInt(prevMonth.substring(0, 4)),
+        parseInt(prevMonth.substring(5, 7)),
+        0
+      ).toISOString().split("T")[0]
+
+      const { data: prevMonthData } = await supabase
+        .from("fact_production")
+        .select("finished_qty")
+        .gte("production_date", prevMonthStart)
+        .lte("production_date", prevMonthEnd)
+
+      // KPI 1: Latest day production
+      const latestDayProduction = (latestDayData || []).reduce(
+        (sum, row) => sum + (row.finished_qty || 0), 0
+      )
+
+      // KPI 2: Operating equipment on latest day
+      const equipSet = new Set(
+        (latestDayData || [])
+          .filter(row => row.equipment_name)
+          .map(row => row.equipment_name)
+      )
+
+      // KPI 3: Defect rate (current month)
+      const totalProduced = (currentMonthData || []).reduce(
+        (sum, row) => sum + (row.produced_qty || 0), 0
+      )
+      const totalDefects = (currentMonthData || []).reduce(
+        (sum, row) => sum + (row.defect_qty || 0), 0
+      )
+      const defectRate = totalProduced > 0 ? totalDefects / totalProduced : 0
+
+      // KPI 4: Month-over-month
+      const thisMonthTotal = (currentMonthData || []).reduce(
+        (sum, row) => sum + (row.finished_qty || 0), 0
+      )
+      const prevMonthTotal = (prevMonthData || []).reduce(
+        (sum, row) => sum + (row.finished_qty || 0), 0
+      )
+
+      // Format month labels (e.g., "3월" vs "2월")
+      const latestMonthNum = parseInt(currentMonth.substring(5, 7))
+      const prevMonthNum = parseInt(prevMonth.substring(5, 7))
+
+      setKpiData({
+        latestDayProduction,
+        operatingEquipment: equipSet.size,
+        defectRate,
+        monthChange: thisMonthTotal - prevMonthTotal,
+        latestMonthLabel: `${latestMonthNum}월`,
+        prevMonthLabel: `${prevMonthNum}월`,
+      })
+    } catch (error) {
+      console.error("Error fetching KPI data:", error)
+    }
+  }, [latestDate])
+
+  // Fetch chart data (depends on period)
+  const fetchChartData = useCallback(async () => {
     if (!latestDate) return
     setLoading(true)
+
     try {
       const daysBack = getDaysBack(period)
       const { startDate, endDate } = getDateRange(daysBack, latestDate)
-      // Use latestDate as the reference "today" for KPI calculations
-      const today = latestDate
+      const currentMonth = latestDate.substring(0, 7)
 
-      // Fetch production data
+      // Fetch production data for charts
       const { data: productionData } = await supabase
         .from("fact_production")
         .select("*")
@@ -139,70 +217,17 @@ export default function Dashboard() {
 
       if (!productionData) return
 
-      // Calculate KPI: Latest day's total production
-      const todayData = productionData.filter(
-        (row) => row.production_date === today
-      )
-      const todayTotal = todayData.reduce((sum, row) => sum + (row.finished_qty || 0), 0)
-
-      // Calculate KPI: Operating equipment count on latest day
-      const operatingEquipSet = new Set(
-        todayData
-          .filter((row) => row.equipment_name)
-          .map((row) => row.equipment_name)
-      )
-      const operatingEquipCount = operatingEquipSet.size
-
-      // Calculate KPI: Defect rate for the month of latest date
-      const currentMonth = today.substring(0, 7)
+      // Current month data (for equipment chart, product mix, utilization)
       const thisMonthData = productionData.filter(
         (row) => row.production_date?.substring(0, 7) === currentMonth
       )
-      const totalProduced = thisMonthData.reduce(
-        (sum, row) => sum + (row.produced_qty || 0),
-        0
-      )
-      const totalDefects = thisMonthData.reduce(
-        (sum, row) => sum + (row.defect_qty || 0),
-        0
-      )
-      const defectRate =
-        totalProduced > 0 ? totalDefects / totalProduced : 0
-
-      // Calculate KPI: Month-over-month change
-      const lastMonth = new Date(today + "T00:00:00")
-      lastMonth.setMonth(lastMonth.getMonth() - 1)
-      const lastMonthStr = lastMonth.toISOString().split("T")[0].substring(0, 7)
-      const lastMonthData = productionData.filter(
-        (row) => row.production_date?.substring(0, 7) === lastMonthStr
-      )
-      const lastMonthTotal = lastMonthData.reduce(
-        (sum, row) => sum + (row.finished_qty || 0),
-        0
-      )
-      const thisMonthTotal = thisMonthData.reduce(
-        (sum, row) => sum + (row.finished_qty || 0),
-        0
-      )
-      const monthChange = thisMonthTotal - lastMonthTotal
-
-      setKpiData({
-        todayProduction: todayTotal,
-        operatingEquipment: operatingEquipCount,
-        defectRate,
-        monthChange,
-      })
 
       // Process daily trend data
       const dailyMap = new Map<string, DailyProduction>()
       productionData.forEach((row) => {
         const date = row.production_date || ""
         if (!dailyMap.has(date)) {
-          dailyMap.set(date, {
-            date,
-            total: 0,
-            details: [],
-          })
+          dailyMap.set(date, { date, total: 0, details: [] })
         }
         const entry = dailyMap.get(date)!
         entry.total += row.finished_qty || 0
@@ -220,11 +245,7 @@ export default function Dashboard() {
       thisMonthData.forEach((row) => {
         const equipName = row.equipment_name || "미지정"
         if (!equipmentMap.has(equipName)) {
-          equipmentMap.set(equipName, {
-            equipment_name: equipName,
-            total: 0,
-            details: [],
-          })
+          equipmentMap.set(equipName, { equipment_name: equipName, total: 0, details: [] })
         }
         const entry = equipmentMap.get(equipName)!
         entry.total += row.finished_qty || 0
@@ -241,11 +262,7 @@ export default function Dashboard() {
       thisMonthData.forEach((row) => {
         const prodName = row.product_name || "미지정"
         if (!productMap.has(prodName)) {
-          productMap.set(prodName, {
-            product_name: prodName,
-            value: 0,
-            details: [],
-          })
+          productMap.set(prodName, { product_name: prodName, value: 0, details: [] })
         }
         const entry = productMap.get(prodName)!
         entry.value += row.finished_qty || 0
@@ -254,24 +271,22 @@ export default function Dashboard() {
           finished_qty: row.finished_qty || 0,
         })
       })
-      const sortedProducts = Array.from(productMap.values())
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 10)
-      setProductMixData(sortedProducts)
+      setProductMixData(
+        Array.from(productMap.values()).sort((a, b) => b.value - a.value).slice(0, 10)
+      )
 
       // Process equipment utilization (current month average)
       const { data: productDims } = await supabase
         .from("dim_product")
         .select("equipment_name, daily_max_qty")
 
-      const utilMap = new Map<string, { actual: number; days: number }>()
+      const utilMap = new Map<string, { actual: number }>()
       thisMonthData.forEach((row) => {
         const equipName = row.equipment_name || "미지정"
         if (!utilMap.has(equipName)) {
-          utilMap.set(equipName, { actual: 0, days: 0 })
+          utilMap.set(equipName, { actual: 0 })
         }
-        const entry = utilMap.get(equipName)!
-        entry.actual += row.finished_qty || 0
+        utilMap.get(equipName)!.actual += row.finished_qty || 0
       })
 
       const utilData: EquipmentUtil[] = []
@@ -279,97 +294,95 @@ export default function Dashboard() {
         const maxQty = productDims?.find(
           (p) => p.equipment_name === equipName
         )?.daily_max_qty || 0
-        const daysInMonth = thisMonthData.filter(
-          (r) => r.equipment_name === equipName
-        ).length
+        const daysWorked = new Set(
+          thisMonthData
+            .filter((r) => r.equipment_name === equipName)
+            .map((r) => r.production_date)
+        ).size
         utilData.push({
           equipment_name: equipName,
-          actual: Math.round(value.actual / Math.max(daysInMonth, 1)),
+          actual: Math.round(value.actual / Math.max(daysWorked, 1)),
           capacity: maxQty || 0,
         })
       })
       setEquipmentUtilData(utilData)
 
-      // Process monthly trend data (last 12 months)
+      // Process monthly trend data
       const monthlyMap = new Map<string, number>()
       productionData.forEach((row) => {
         const month = row.production_date?.substring(0, 7) || ""
         if (month) {
-          monthlyMap.set(
-            month,
-            (monthlyMap.get(month) || 0) + (row.finished_qty || 0)
-          )
+          monthlyMap.set(month, (monthlyMap.get(month) || 0) + (row.finished_qty || 0))
         }
       })
-      const sortedMonths = Array.from(monthlyMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .slice(-12)
       setMonthlyTrendData(
-        sortedMonths.map(([month, total]) => ({ month, total }))
+        Array.from(monthlyMap.entries())
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .slice(-12)
+          .map(([month, total]) => ({ month, total }))
       )
     } catch (error) {
-      console.error("Error fetching data:", error)
+      console.error("Error fetching chart data:", error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [latestDate, period])
 
   useEffect(() => {
     if (latestDate) {
-      fetchData()
+      fetchKPIData()
+      fetchChartData()
     }
-  }, [period, latestDate])
+  }, [latestDate, fetchKPIData, fetchChartData])
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">메인 대시보드</h1>
-            {latestDate && (
-              <p className="text-sm text-gray-500 mt-1">
-                기준일: {latestDate}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm font-medium text-gray-700">기간:</label>
-            <Select value={period} onValueChange={(value) => setPeriod(value as PeriodType)}>
-              <SelectTrigger className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1month">최근 1개월</SelectItem>
-                <SelectItem value="3months">최근 3개월</SelectItem>
-                <SelectItem value="6months">최근 6개월</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">메인 대시보드</h1>
+          {latestDate && (
+            <p className="text-sm text-gray-500 mt-1">
+              데이터 기준일: {latestDate}
+            </p>
+          )}
         </div>
-
-        {loading ? (
-          <div className="text-center py-12 text-gray-500">데이터 로딩 중...</div>
-        ) : (
-          <>
-            {/* KPI Cards */}
-            <KPICards {...kpiData} />
-
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <DailyTrendChart data={dailyTrendData as any} />
-              <EquipmentProductionChart data={equipmentProductionData as any} />
-              <ProductMixChart data={productMixData as any} />
-              <EquipmentUtilizationChart data={equipmentUtilData as any} />
-            </div>
-
-            {/* Full width monthly trend */}
-            <div className="mt-6">
-              <MonthlyTrendChart data={monthlyTrendData} />
-            </div>
-          </>
-        )}
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium text-gray-700">차트 기간:</label>
+          <Select value={period} onValueChange={(value) => setPeriod(value as PeriodType)}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1month">최근 1개월</SelectItem>
+              <SelectItem value="3months">최근 3개월</SelectItem>
+              <SelectItem value="6months">최근 6개월</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-gray-500">데이터 로딩 중...</div>
+      ) : (
+        <>
+          {/* KPI Cards */}
+          <KPICards {...kpiData} latestDate={latestDate} />
+
+          {/* Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DailyTrendChart data={dailyTrendData as any} />
+            <EquipmentProductionChart data={equipmentProductionData as any} />
+            <ProductMixChart data={productMixData as any} />
+            <EquipmentUtilizationChart data={equipmentUtilData as any} />
+          </div>
+
+          {/* Full width monthly trend */}
+          <div className="mt-6">
+            <MonthlyTrendChart data={monthlyTrendData} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

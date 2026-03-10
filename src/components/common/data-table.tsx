@@ -399,17 +399,35 @@ export function DataTable<T extends Record<string, any>>({
             >
               이전
             </Button>
-            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-              <Button
-                key={page}
-                size="sm"
-                variant={currentPage === page ? 'default' : 'outline'}
-                onClick={() => setCurrentPage(page)}
-                className="w-8"
-              >
-                {page}
-              </Button>
-            ))}
+            {(() => {
+              const pages: (number | string)[] = []
+              if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) pages.push(i)
+              } else {
+                pages.push(1)
+                if (currentPage > 3) pages.push('...')
+                const start = Math.max(2, currentPage - 1)
+                const end = Math.min(totalPages - 1, currentPage + 1)
+                for (let i = start; i <= end; i++) pages.push(i)
+                if (currentPage < totalPages - 2) pages.push('...')
+                pages.push(totalPages)
+              }
+              return pages.map((page, idx) =>
+                typeof page === 'string' ? (
+                  <span key={`ellipsis-${idx}`} className="px-1 text-gray-400">...</span>
+                ) : (
+                  <Button
+                    key={page}
+                    size="sm"
+                    variant={currentPage === page ? 'default' : 'outline'}
+                    onClick={() => setCurrentPage(page)}
+                    className="w-8"
+                  >
+                    {page}
+                  </Button>
+                )
+              )
+            })()}
             <Button
               size="sm"
               variant="outline"

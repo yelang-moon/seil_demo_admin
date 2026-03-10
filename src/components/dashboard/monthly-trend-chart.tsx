@@ -59,9 +59,6 @@ export function MonthlyTrendChart({ data }: MonthlyTrendChartProps) {
         </CardContent>
       </Card>
 
-      <div className="mt-2 p-3 bg-blue-50 rounded-lg text-sm text-blue-800 min-h-[40px]">
-        <span className="text-gray-400">💡 AI 분석 로딩 중...</span>
-      </div>
     </>
   )
 }

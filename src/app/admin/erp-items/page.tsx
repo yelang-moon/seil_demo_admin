@@ -240,11 +240,11 @@ export default function ErpItemsPage() {
             <div>
               <Label htmlFor="category_large">대분류</Label>
               <Select
-                value={formData.category_large || ''}
+                value={formData.category_large || '__none__'}
                 onValueChange={(value) => {
                   setFormData({
                     ...formData,
-                    category_large: value || null,
+                    category_large: value === '__none__' ? null : value,
                     category_medium: null,
                     category_small: null,
                   })
@@ -254,7 +254,7 @@ export default function ErpItemsPage() {
                   <SelectValue placeholder="대분류 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">선택 안 함</SelectItem>
+                  <SelectItem value="__none__">선택 안 함</SelectItem>
                   {categories.large.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
@@ -267,11 +267,11 @@ export default function ErpItemsPage() {
             <div>
               <Label htmlFor="category_medium">중분류</Label>
               <Select
-                value={formData.category_medium || ''}
+                value={formData.category_medium || '__none__'}
                 onValueChange={(value) => {
                   setFormData({
                     ...formData,
-                    category_medium: value || null,
+                    category_medium: value === '__none__' ? null : value,
                     category_small: null,
                   })
                 }}
@@ -281,7 +281,7 @@ export default function ErpItemsPage() {
                   <SelectValue placeholder="중분류 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">선택 안 함</SelectItem>
+                  <SelectItem value="__none__">선택 안 함</SelectItem>
                   {getMediumOptions().map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
@@ -294,11 +294,11 @@ export default function ErpItemsPage() {
             <div>
               <Label htmlFor="category_small">소분류</Label>
               <Select
-                value={formData.category_small || ''}
+                value={formData.category_small || '__none__'}
                 onValueChange={(value) => {
                   setFormData({
                     ...formData,
-                    category_small: value || null,
+                    category_small: value === '__none__' ? null : value,
                   })
                 }}
                 disabled={!formData.category_medium}
@@ -307,7 +307,7 @@ export default function ErpItemsPage() {
                   <SelectValue placeholder="소분류 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">선택 안 함</SelectItem>
+                  <SelectItem value="__none__">선택 안 함</SelectItem>
                   {getSmallOptions().map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
@@ -332,16 +332,16 @@ export default function ErpItemsPage() {
             <div>
               <Label htmlFor="tax_type">과세유형</Label>
               <Select
-                value={formData.tax_type || ''}
+                value={formData.tax_type || '__none__'}
                 onValueChange={(value) => {
-                  setFormData({ ...formData, tax_type: value || null })
+                  setFormData({ ...formData, tax_type: value === '__none__' ? null : value })
                 }}
               >
                 <SelectTrigger id="tax_type">
                   <SelectValue placeholder="과세유형 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">선택 안 함</SelectItem>
+                  <SelectItem value="__none__">선택 안 함</SelectItem>
                   <SelectItem value="과세">과세</SelectItem>
                   <SelectItem value="면세">면세</SelectItem>
                   <SelectItem value="영세">영세</SelectItem>
