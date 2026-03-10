@@ -61,6 +61,7 @@ interface MonthlyData {
 
 export default function Dashboard() {
   const [period, setPeriod] = useState<PeriodType>("1month")
+  const [latestDate, setLatestDate] = useState<string>("")
   const [kpiData, setKpiData] = useState({
     todayProduction: 0,
     operatingEquipment: 0,
@@ -91,8 +92,8 @@ export default function Dashboard() {
     }
   }
 
-  const getDateRange = (daysBack: number) => {
-    const end = new Date()
+  const getDateRange = (daysBack: number, baseDate: string) => {
+    const end = new Date(baseDate + "T00:00:00")
     const start = new Date(end.getTime() - daysBack * 24 * 60 * 60 * 1000)
     return {
       startDate: start.toISOString().split("T")[0],
@@ -100,12 +101,33 @@ export default function Dashboard() {
     }
   }
 
+  // Fetch the latest date with data on mount
+  useEffect(() => {
+    const fetchLatestDate = async () => {
+      try {
+        const { data } = await supabase
+          .from("fact_production")
+          .select("production_date")
+          .order("production_date", { ascending: false })
+          .limit(1)
+        if (data && data.length > 0) {
+          setLatestDate(data[0].production_date)
+        }
+      } catch (error) {
+        console.error("Error fetching latest date:", error)
+      }
+    }
+    fetchLatestDate()
+  }, [])
+
   const fetchData = async () => {
+    if (!latestDate) return
     setLoading(true)
     try {
       const daysBack = getDaysBack(period)
-      const { startDate, endDate } = getDateRange(daysBack)
-      const today = new Date().toISOString().split("T")[0]
+      const { startDate, endDate } = getDateRange(daysBack, latestDate)
+      // Use latestDate as the reference "today" for KPI calculations
+      const today = latestDate
 
       // Fetch production data
       const { data: productionData } = await supabase
@@ -117,13 +139,13 @@ export default function Dashboard() {
 
       if (!productionData) return
 
-      // Calculate KPI: Today's total production
+      // Calculate KPI: Latest day's total production
       const todayData = productionData.filter(
         (row) => row.production_date === today
       )
       const todayTotal = todayData.reduce((sum, row) => sum + (row.finished_qty || 0), 0)
 
-      // Calculate KPI: Operating equipment count today
+      // Calculate KPI: Operating equipment count on latest day
       const operatingEquipSet = new Set(
         todayData
           .filter((row) => row.equipment_name)
@@ -131,7 +153,7 @@ export default function Dashboard() {
       )
       const operatingEquipCount = operatingEquipSet.size
 
-      // Calculate KPI: Defect rate for current month
+      // Calculate KPI: Defect rate for the month of latest date
       const currentMonth = today.substring(0, 7)
       const thisMonthData = productionData.filter(
         (row) => row.production_date?.substring(0, 7) === currentMonth
@@ -238,7 +260,6 @@ export default function Dashboard() {
       setProductMixData(sortedProducts)
 
       // Process equipment utilization (current month average)
-      // Fetch product dimensions for daily_max_qty
       const { data: productDims } = await supabase
         .from("dim_product")
         .select("equipment_name, daily_max_qty")
@@ -261,8 +282,6 @@ export default function Dashboard() {
         const daysInMonth = thisMonthData.filter(
           (r) => r.equipment_name === equipName
         ).length
-        const avgCapacity =
-          daysInMonth > 0 ? (maxQty * daysInMonth) / 1 : 0
         utilData.push({
           equipment_name: equipName,
           actual: Math.round(value.actual / Math.max(daysInMonth, 1)),
@@ -296,15 +315,24 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    fetchData()
-  }, [period])
+    if (latestDate) {
+      fetchData()
+    }
+  }, [period, latestDate])
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <h1 className="text-3xl font-bold text-gray-900">메인 대시보드</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">메인 대시보드</h1>
+            {latestDate && (
+              <p className="text-sm text-gray-500 mt-1">
+                기준일: {latestDate}
+              </p>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">기간:</label>
             <Select value={period} onValueChange={(value) => setPeriod(value as PeriodType)}>
