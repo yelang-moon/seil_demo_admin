@@ -1,6 +1,7 @@
 import { streamClaude } from '@/lib/claude'
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchIndustryNews } from '@/lib/external-context'
+import { getInsightKnowledge } from '@/data/knowledge-base'
 
 export async function POST(request: NextRequest) {
   try {
@@ -101,10 +102,12 @@ export async function POST(request: NextRequest) {
 - 회사명: (주)에스이아이엘 (SEIL)
 - 소재지: 경기도 광주시
 - 주요 사업: 일회용 식품 용기, 컵, 수저, 빨대 등 제조
-- 소재: PP(폴리프로필렌), PS(폴리스타이렌), PET(폴리에틸렌테레프탈레이트)
-- 생산 방식: 사출 성형(성형부), 지기(종이 용기) 생산(지기생산부)
-- 판매 채널: 쿠팡, 네이버스토어, 11번가, SSG.COM, 옥션, 지마켓, 아마존 등 온라인 마켓플레이스
-- 특징: 다품종 소량생산 체계, 금형 기반 제조, B2C 온라인 판매 중심
+- 소재: PP(폴리프로필렌), PS(폴리스타이렌), PET(폴리에틸렌테레프탈레이트), PLA(생분해), 종이
+- 생산 방식: 열성형(성형부 - VFK TSAV/SV 시리즈), 지기(종이 용기) 생산(지기생산부 - TMC/즈신/윈샤인/다치오 장비)
+- 판매 채널: 쿠팡, 네이버스토어, 11번가, SSG.COM, 옥션, 지마켓 (온라인), CJ제일제당, 대상, 오뚜기 등 (B2B), 아마존 (해외)
+- 인증: ISO 9001, ISO 14001, FSSC 22000, HACCP, SGS, UL
+- 특징: 멀티소재(PP+PET+PLA+종이) 다품종 생산 체계, 멀티채널 판매, 해외 진출(아마존) 추진 중
+- 사업 방향: 친환경 소재 전환, 해외 시장 확장 (일본/동남아), 온라인 채널 강화
 
 이 회사의 특성을 잘 이해한 상태에서 데이터를 분석하고, 일회용품 제조업체에 맞는 실질적 인사이트를 제공하세요.
 
@@ -193,22 +196,38 @@ ${JSON.stringify(safetyStockData, null, 2)}`
 ${JSON.stringify(utilizationData.equipmentUtilization, null, 2)}`
     }
 
-    // 외부 뉴스/시장 동향 수집 (병렬로 실행)
+    // 지식 베이스 데이터 추가 (글로벌 시장, 규제, 원자재, 경쟁사, 전략 인사이트)
+    const knowledgeBase = getInsightKnowledge()
+    userMessage += `
+
+---
+## 글로벌 업계 지식 베이스 (전략 분석용)
+${knowledgeBase}
+---`
+
+    // 외부 뉴스/시장 동향 수집 (실시간)
     let externalContext = ''
     try {
       externalContext = await fetchIndustryNews(12)
     } catch {
-      externalContext = '(외부 뉴스 수집 실패 - 내부 데이터 기반으로 분석합니다)'
+      externalContext = '(외부 뉴스 수집 실패)'
     }
 
     if (externalContext) {
       userMessage += `
 
 ---
+## 실시간 업계 뉴스
 ${externalContext}
 ---
-위 외부 뉴스와 시장 동향을 참고하여, 내부 데이터 분석과 연계한 종합적 인사이트를 제공하세요.
-특히 AI 활용 전략 인사이트, 종합 진단 섹션에서 외부 환경 요인을 적극 반영하세요.`
+위 지식 베이스와 실시간 뉴스를 내부 데이터 분석과 연계하여 종합적 인사이트를 제공하세요.
+특히:
+1. 글로벌 경쟁사 대비 SEIL의 위치와 전략적 차별점
+2. 원자재 가격 동향이 원가에 미치는 영향
+3. 각국 규제 변화에 대한 대응 전략
+4. 해외 시장(일본, 동남아, 미국) 진출 기회
+5. 친환경 소재 전환 전략과 타이밍
+을 AI 전략 인사이트 섹션에서 깊이 있게 다루세요.`
     }
 
     const streamBody = await streamClaude(systemPrompt, userMessage)
