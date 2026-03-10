@@ -9,7 +9,8 @@ export interface Equipment {
 }
 
 export interface Product {
-  product_code: string
+  id: number
+  product_code: string | null
   product_name: string | null
   pack_qty: number | null
   rpm: number | null

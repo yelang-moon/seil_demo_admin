@@ -56,7 +56,7 @@ export default function ProductsPage() {
     setLoading(true)
     try {
       const [productsRes, equipmentRes] = await Promise.all([
-        supabase.from('dim_product').select('*').order('product_code'),
+        supabase.from('dim_product').select('*').order('id'),
         supabase.from('dim_equipment').select('equipment_id, name_official, name_legacy').order('equipment_id') as any,
       ])
 
@@ -90,7 +90,7 @@ export default function ProductsPage() {
       const { error } = await supabase
         .from('dim_product')
         .delete()
-        .eq('product_code', item.product_code)
+        .eq('id', item.id)
 
       if (error) throw error
       window.alert('제품이 삭제되었습니다.')
@@ -102,24 +102,21 @@ export default function ProductsPage() {
   }
 
   const handleSave = async () => {
-    if (!formData.product_code) {
-      window.alert('제품코드는 필수입니다.')
-      return
-    }
-
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { id, ...saveData } = formData as any
       if (editingItem) {
         const { error } = await supabase
           .from('dim_product')
-          .update(formData)
-          .eq('product_code', editingItem.product_code)
+          .update(saveData)
+          .eq('id', editingItem.id)
 
         if (error) throw error
         window.alert('제품이 수정되었습니다.')
       } else {
         const { error } = await supabase
           .from('dim_product')
-          .insert([formData])
+          .insert([saveData])
 
         if (error) throw error
         window.alert('제품이 추가되었습니다.')
@@ -176,7 +173,6 @@ export default function ProductsPage() {
                 onChange={(e) =>
                   setFormData({ ...formData, product_code: e.target.value })
                 }
-                disabled={!!editingItem}
                 placeholder="예: P001"
               />
             </div>
