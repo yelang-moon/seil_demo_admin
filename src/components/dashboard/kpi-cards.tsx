@@ -1,32 +1,9 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { formatNumber, formatPercent } from "@/lib/utils"
 import { DetailPopup } from "@/components/common/detail-popup"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts"
-import { supabase } from "@/lib/supabase"
 
 interface KPICardsProps {
   periodProduction: number
@@ -37,6 +14,7 @@ interface KPICardsProps {
   lastYearPeriodLabel: string
   defectPeriodLabel: string
   latestDate: string
+  periodDays: number
   productionDetails: Array<{
     product_name: string | null
     equipment_name: string | null
@@ -52,11 +30,21 @@ interface KPICardsProps {
     role: string
     equipment_name: string | null
   }>
+  defectDetails: Array<{
+    equipment_name: string
+    produced_qty: number
+    defect_qty: number
+    defect_rate: number
+  }>
+  lastYearCompareDetails: Array<{
+    equipment_name: string
+    thisYearQty: number
+    lastYearQty: number
+    change: number
+  }>
   totalEquipmentCount: number
   factory: string
 }
-
-type EquipPopupPeriod = "1month" | "3months"
 
 export function KPICards({
   periodProduction,
@@ -67,9 +55,12 @@ export function KPICards({
   lastYearPeriodLabel,
   defectPeriodLabel,
   latestDate,
+  periodDays,
   productionDetails,
   equipmentDetails,
   workerDetails,
+  defectDetails,
+  lastYearCompareDetails,
   totalEquipmentCount,
   factory,
 }: KPICardsProps) {
@@ -77,89 +68,14 @@ export function KPICards({
 
   const [productionPopup, setProductionPopup] = useState(false)
   const [equipmentPopup, setEquipmentPopup] = useState(false)
+  const [defectPopup, setDefectPopup] = useState(false)
   const [workerPopup, setWorkerPopup] = useState(false)
-  const [equipUtilPopup, setEquipUtilPopup] = useState(false)
-  const [equipUtilPeriod, setEquipUtilPeriod] = useState<EquipPopupPeriod>("1month")
-  const [equipUtilChartData, setEquipUtilChartData] = useState<Array<{ date: string; rate: number }>>([])
-  const [equipUtilLoading, setEquipUtilLoading] = useState(false)
-
-  const fetchEquipUtilData = useCallback(async () => {
-    if (!latestDate || !equipUtilPopup) return
-    setEquipUtilLoading(true)
-    try {
-      const days = equipUtilPeriod === "1month" ? 30 : 90
-      const end = new Date(latestDate + "T00:00:00")
-      const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000)
-      const startStr = start.toISOString().split("T")[0]
-
-      const [prodRes, equipRes, specRes] = await Promise.all([
-        supabase
-          .from("fact_production")
-          .select("production_date, equipment_name, finished_qty")
-          .eq("factory", factory)
-          .gte("production_date", startStr)
-          .lte("production_date", latestDate),
-        supabase
-          .from("dim_equipment")
-          .select("equipment_id, name_legacy")
-          .eq("factory", factory),
-        supabase
-          .from("dim_product")
-          .select("equipment_name, daily_max_qty")
-          .eq("factory", factory),
-      ])
-
-      const productionData = prodRes.data || []
-      const allEquipment = equipRes.data || []
-      const productSpecs = specRes.data || []
-
-      const equipCapacity = new Map<string, number>()
-      allEquipment.forEach(eq => {
-        const spec = productSpecs.find(s => s.equipment_name === eq.name_legacy)
-        if (spec?.daily_max_qty) {
-          equipCapacity.set(eq.name_legacy || "", spec.daily_max_qty)
-        }
-      })
-      const totalDailyCapacity = Array.from(equipCapacity.values()).reduce((s, v) => s + v, 0)
-
-      const dailyMap = new Map<string, number>()
-      productionData.forEach(row => {
-        const date = row.production_date || ""
-        dailyMap.set(date, (dailyMap.get(date) || 0) + (row.finished_qty || 0))
-      })
-
-      const chartData = Array.from(dailyMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([date, total]) => ({
-          date: date.slice(5),
-          rate: totalDailyCapacity > 0 ? Math.round((total / totalDailyCapacity) * 100) : 0,
-        }))
-
-      setEquipUtilChartData(chartData)
-    } catch (err) {
-      console.error("Error fetching equipment utilization:", err)
-    } finally {
-      setEquipUtilLoading(false)
-    }
-  }, [latestDate, equipUtilPeriod, equipUtilPopup, factory])
-
-  useEffect(() => {
-    fetchEquipUtilData()
-  }, [fetchEquipUtilData])
-
-  // Calculate year change percentage
-  const yearChangePercent = yearChange !== 0 && lastYearPeriodLabel
-    ? (() => {
-        // We don't have lastYearTotal directly, but we can derive it
-        // yearChange = thisTotal - lastYearTotal => lastYearTotal = thisTotal - yearChange
-        // We'd need thisTotal which we don't have, so just show absolute
-        return null
-      })()
-    : null
+  const [yearComparePopup, setYearComparePopup] = useState(false)
 
   return (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        {/* 기간내 생산량 카드 */}
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setProductionPopup(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">기간내 생산량</CardTitle>
@@ -170,6 +86,7 @@ export function KPICards({
           </CardContent>
         </Card>
 
+        {/* 가동 설비 수 카드 */}
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setEquipmentPopup(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">가동 설비 수</CardTitle>
@@ -183,7 +100,8 @@ export function KPICards({
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setWorkerPopup(true)}>
+        {/* 불량률 카드 */}
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setDefectPopup(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">불량률</CardTitle>
           </CardHeader>
@@ -193,7 +111,19 @@ export function KPICards({
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setEquipUtilPopup(true)}>
+        {/* 작업 인원 총원 카드 */}
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setWorkerPopup(true)}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">작업 인원</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{workerDetails.length}</div>
+            <p className="text-xs text-gray-500 mt-1">{periodLabel} 기간 내</p>
+          </CardContent>
+        </Card>
+
+        {/* 작년 대비 증감 카드 */}
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setYearComparePopup(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">작년 대비 증감</CardTitle>
           </CardHeader>
@@ -215,11 +145,13 @@ export function KPICards({
           { key: "equipment_name", label: "설비명" },
           { key: "product_name", label: "제품명" },
           { key: "finished_qty", label: "생산량" },
+          { key: "daily_avg", label: "일평균 생산량" },
         ]}
         data={productionDetails.map(d => ({
           equipment_name: d.equipment_name || "-",
           product_name: d.product_name || "-",
           finished_qty: formatNumber(d.finished_qty),
+          daily_avg: formatNumber(Math.round(d.finished_qty / periodDays)),
         }))}
       />
 
@@ -235,6 +167,25 @@ export function KPICards({
         data={equipmentDetails.map(d => ({
           equipment_name: d.equipment_name,
           finished_qty: formatNumber(d.finished_qty),
+        }))}
+      />
+
+      {/* 불량률 상세 팝업 */}
+      <DetailPopup
+        open={defectPopup}
+        onOpenChange={setDefectPopup}
+        title={`${defectPeriodLabel} 불량률 상세`}
+        columns={[
+          { key: "equipment_name", label: "설비명" },
+          { key: "produced_qty", label: "생산량" },
+          { key: "defect_qty", label: "불량량" },
+          { key: "defect_rate", label: "불량률" },
+        ]}
+        data={defectDetails.map(d => ({
+          equipment_name: d.equipment_name,
+          produced_qty: formatNumber(d.produced_qty),
+          defect_qty: formatNumber(d.defect_qty),
+          defect_rate: formatPercent(d.defect_rate),
         }))}
       />
 
@@ -255,47 +206,26 @@ export function KPICards({
         }))}
       />
 
-      {/* 설비 가동율 차트 팝업 */}
-      <Dialog open={equipUtilPopup} onOpenChange={setEquipUtilPopup}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-4">
-              <span>일별 설비 가동율 추이</span>
-              <Select value={equipUtilPeriod} onValueChange={(v) => setEquipUtilPeriod(v as EquipPopupPeriod)}>
-                <SelectTrigger className="w-28 h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1month">1개월</SelectItem>
-                  <SelectItem value="3months">3개월</SelectItem>
-                </SelectContent>
-              </Select>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 overflow-auto">
-            {equipUtilLoading ? (
-              <div className="text-center py-12 text-gray-500">로딩 중...</div>
-            ) : equipUtilChartData.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">데이터가 없습니다</div>
-            ) : (
-              <div className="w-full h-[400px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={equipUtilChartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                    <YAxis domain={[0, 120]} tickFormatter={(v) => `${v}%`} />
-                    <Tooltip
-                      formatter={(value) => [`${value}%`, "가동율"]}
-                      contentStyle={{ backgroundColor: "#f3f4f6", border: "1px solid #e5e7eb" }}
-                    />
-                    <Bar dataKey="rate" fill="#3b82f6" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* 작년 대비 생산량 비교 팝업 */}
+      <DetailPopup
+        open={yearComparePopup}
+        onOpenChange={setYearComparePopup}
+        title={`${periodLabel} vs ${lastYearPeriodLabel} 생산량 비교`}
+        columns={[
+          { key: "equipment_name", label: "설비명" },
+          { key: "thisYearQty", label: "올해 생산량" },
+          { key: "lastYearQty", label: "작년 생산량" },
+          { key: "change", label: "증감량" },
+          { key: "changePercent", label: "증감률" },
+        ]}
+        data={lastYearCompareDetails.map(d => ({
+          equipment_name: d.equipment_name,
+          thisYearQty: formatNumber(d.thisYearQty),
+          lastYearQty: formatNumber(d.lastYearQty),
+          change: formatNumber(d.change),
+          changePercent: d.lastYearQty !== 0 ? formatPercent((d.change / d.lastYearQty) * 100) : "-",
+        }))}
+      />
     </>
   )
 }

@@ -1,9 +1,25 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { DetailPopup } from "@/components/common/detail-popup"
 import { formatNumber } from "@/lib/utils"
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+} from "recharts"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface EquipmentUtilizationChartProps {
   data: {
@@ -11,6 +27,8 @@ interface EquipmentUtilizationChartProps {
     actual: number
     capacity: number
   }[]
+  dailyData?: Array<{ date: string; equipment_name: string; finished_qty: number }>
+  equipCapacities?: Record<string, number>
 }
 
 function GaugeChart({
@@ -98,8 +116,12 @@ function GaugeChart({
 
 export function EquipmentUtilizationChart({
   data,
+  dailyData,
+  equipCapacities,
 }: EquipmentUtilizationChartProps) {
   const [popupOpen, setPopupOpen] = useState(false)
+  const [selectedEquip, setSelectedEquip] = useState<string | null>(null)
+  const [linePopup, setLinePopup] = useState(false)
   const filteredData = data.filter(d => d.capacity > 0)
 
   // Calculate overall utilization
@@ -116,9 +138,29 @@ export function EquipmentUtilizationChart({
     }
   })
 
+  const lineChartData = useMemo(() => {
+    if (!selectedEquip || !dailyData || !equipCapacities) return []
+    const capacity = equipCapacities[selectedEquip] || 0
+    if (capacity === 0) return []
+
+    const dailyMap = new Map<string, number>()
+    dailyData
+      .filter(d => d.equipment_name === selectedEquip)
+      .forEach(d => {
+        dailyMap.set(d.date, (dailyMap.get(d.date) || 0) + d.finished_qty)
+      })
+
+    return Array.from(dailyMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, qty]) => ({
+        date: date.slice(5),
+        rate: Math.round((qty / capacity) * 100 * 10) / 10,
+      }))
+  }, [selectedEquip, dailyData, equipCapacities])
+
   return (
     <>
-      <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setPopupOpen(true)}>
+      <Card>
         <CardHeader>
           <CardTitle className="text-base">설비 가동률</CardTitle>
         </CardHeader>
@@ -145,6 +187,7 @@ export function EquipmentUtilizationChart({
                     actual={item.actual}
                     capacity={item.capacity}
                     size={120}
+                    onClick={() => { setSelectedEquip(item.equipment_name || ""); setLinePopup(true) }}
                   />
                 ))}
               </div>
@@ -165,6 +208,32 @@ export function EquipmentUtilizationChart({
         ]}
         data={popupData}
       />
+
+      <Dialog open={linePopup} onOpenChange={setLinePopup}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{selectedEquip} 일별 가동률</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            {lineChartData.length === 0 ? (
+              <div className="text-center py-12 text-gray-500">데이터가 없습니다</div>
+            ) : (
+              <div className="w-full h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={lineChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 'auto']} tickFormatter={(v) => `${v}%`} />
+                    <Tooltip formatter={(value) => [`${value}%`, "가동률"]} />
+                    <ReferenceLine y={100} stroke="#ef4444" strokeDasharray="3 3" label="100%" />
+                    <Line type="monotone" dataKey="rate" stroke="#3b82f6" strokeWidth={2} dot={{ r: 2 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

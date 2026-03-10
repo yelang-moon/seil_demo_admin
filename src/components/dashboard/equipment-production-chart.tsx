@@ -44,7 +44,19 @@ export function EquipmentProductionChart({
   }
 
   const selectedDetails = selectedEquipment
-    ? data.find((d) => d.equipment_name === selectedEquipment)?.details || []
+    ? (() => {
+        const details = data.find((d) => d.equipment_name === selectedEquipment)?.details || []
+        // Aggregate by product_name
+        const map = new Map<string, number>()
+        details.forEach(d => {
+          const key = d.product_name || '미지정'
+          map.set(key, (map.get(key) || 0) + d.finished_qty)
+        })
+        return Array.from(map.entries()).map(([name, qty]) => ({
+          product_name: name,
+          finished_qty: qty,
+        })).sort((a, b) => b.finished_qty - a.finished_qty)
+      })()
     : []
 
   // Sort by total production descending
@@ -109,7 +121,7 @@ export function EquipmentProductionChart({
           { key: "finished_qty", label: "생산량" },
         ]}
         data={selectedDetails.map((d) => ({
-          product_name: d.product_name || "-",
+          product_name: d.product_name,
           finished_qty: d.finished_qty.toLocaleString("ko-KR"),
         }))}
       />

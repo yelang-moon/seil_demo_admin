@@ -106,8 +106,8 @@ export function EquipmentCard({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-sm">
-          {equipment.name_official || equipment.name_short || "미지정"}
-          {equipment.name_short && ` (${equipment.name_short})`}
+          <EquipmentNameTooltip name={equipment.name_official || equipment.name_short || "미지정"} />
+          {equipment.name_short && <span className="text-gray-500"> ({equipment.name_short})</span>}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -150,6 +150,21 @@ export function EquipmentCard({
           <p className="text-xs text-gray-600">
             {workHours}시간 {workMins}분
           </p>
+          {(() => {
+            if (!production.work_start_hhmm || !production.work_end_hhmm || !production.work_minutes) return null
+            const [sh, sm] = production.work_start_hhmm.split(':').map(Number)
+            const [eh, em] = production.work_end_hhmm.split(':').map(Number)
+            const totalMinutes = (eh * 60 + em) - (sh * 60 + sm)
+            const breakMinutes = totalMinutes - (production.work_minutes || 0)
+            if (breakMinutes <= 0) return null
+            const breakH = Math.floor(breakMinutes / 60)
+            const breakM = breakMinutes % 60
+            return (
+              <p className="text-xs text-orange-500 mt-0.5">
+                휴게 {breakH > 0 ? `${breakH}시간 ` : ''}{breakM}분
+              </p>
+            )
+          })()}
         </div>
 
         <div className="grid grid-cols-2 gap-2 pt-2 border-t">

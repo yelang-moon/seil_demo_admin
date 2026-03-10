@@ -92,9 +92,14 @@ function calcUrgency(
     return { urgency: 'discontinued', label: '판매중단' }
   }
 
-  // Dead stock case: very high stock with no recent shipments
-  if (stockRatio > 250 && !hasRecentShipment) {
-    return { urgency: 'medium', label: '악성재고 의심' }
+  // 악성재고: very high stock with 30d shipment but no recent shipment
+  if (stockRatio >= 300 && has30dShipment && !hasRecentShipment) {
+    return { urgency: 'medium', label: '악성재고' }
+  }
+
+  // 과잉재고 주의: very high stock with recent shipment
+  if (stockRatio >= 300 && hasRecentShipment) {
+    return { urgency: 'medium', label: '과잉재고 주의' }
   }
 
   if (hasRecentShipment && avgDaily7d > 0) {
@@ -141,6 +146,13 @@ const DAYS_FILTER_OPTIONS = [
   { label: '14일 이내', min: 0, max: 14 },
   { label: '30일 이내', min: 0, max: 30 },
   { label: '30일 이상', min: 30, max: Infinity },
+]
+
+const TREND_FILTER_OPTIONS = [
+  { key: 'all', label: '전체', dotColor: '' },
+  { key: 'up', label: '증가 ↑', dotColor: 'bg-red-500' },
+  { key: 'down', label: '감소 ↓', dotColor: 'bg-green-500' },
+  { key: 'stable', label: '보합 -', dotColor: 'bg-gray-400' },
 ]
 
 type SortKey = 'urgency' | 'stockRatio' | 'daysRemaining' | 'shipments7d' | 'shipments30d' | 'shipments180d' | 'product_name' | 'equipment_name'
@@ -218,6 +230,7 @@ export default function SafetyStockPage() {
   // Filters
   const [urgencyFilter, setUrgencyFilter] = useState<string>('all')
   const [daysFilter, setDaysFilter] = useState<string>('0')
+  const [trendFilter, setTrendFilter] = useState<string>('all')
 
   // Fetch all data
   const fetchData = useCallback(async () => {
@@ -371,6 +384,11 @@ export default function SafetyStockPage() {
       filtered = filtered.filter(a => a.daysRemaining >= df.min && a.daysRemaining < df.max)
     }
 
+    // Trend filter
+    if (trendFilter !== 'all') {
+      filtered = filtered.filter(a => a.trend === trendFilter)
+    }
+
     filtered.sort((a, b) => {
       let cmp = 0
       switch (sortKey) {
@@ -403,16 +421,13 @@ export default function SafetyStockPage() {
     })
 
     return filtered
-  }, [analyses, search, sortKey, sortDir, urgencyFilter, daysFilter])
+  }, [analyses, search, sortKey, sortDir, urgencyFilter, daysFilter, trendFilter])
 
-  // KPI stats
-  const stats = useMemo(() => {
-    const total = analyses.length
-    const belowSafety = analyses.filter(a => a.stockRatio < 100 && a.urgency !== 'discontinued').length
-    const critical = analyses.filter(a => a.urgency === 'critical' || a.urgency === 'high').length
-    const deadStock = analyses.filter(a => a.stockRatio > 250 && a.shipments30d === 0 && a.urgency !== 'discontinued').length
-    const discontinued = analyses.filter(a => a.urgency === 'discontinued').length
-    return { total, belowSafety, critical, deadStock, discontinued }
+  // KPI stats - Urgency level counts
+  const urgencyCounts = useMemo(() => {
+    const counts: Record<string, number> = { critical: 0, high: 0, medium: 0, low: 0, discontinued: 0 }
+    analyses.forEach(a => { counts[a.urgency] = (counts[a.urgency] || 0) + 1 })
+    return counts
   }, [analyses])
 
   const toggleSort = (key: SortKey) => {
@@ -514,72 +529,91 @@ export default function SafetyStockPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">안전 재고 대시보드</h1>
-        <p className="text-gray-600 mt-2">제품별 안전 재고 현황 및 생산 우선순위를 확인합니다.</p>
+        <p className="text-gray-600 mt-2">전체 {analyses.length}개 제품 - 긴급 {urgencyCounts.critical} / 우선 {urgencyCounts.high} / 주의 {urgencyCounts.medium} / 양호 {urgencyCounts.low} / 판매중단 {urgencyCounts.discontinued}</p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Package className="h-5 w-5 text-blue-600" />
-              </div>
+      {/* KPI Cards - Urgency level counts */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
+        <Card
+          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'all' && "ring-2 ring-blue-400")}
+          onClick={() => setUrgencyFilter('all')}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-blue-600" />
               <div>
-                <p className="text-sm text-gray-500">관리 제품</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
+                <p className="text-xs text-gray-500">전체</p>
+                <p className="text-xl font-bold">{analyses.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
-                <ShieldAlert className="h-5 w-5 text-red-600" />
-              </div>
+        <Card
+          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'critical' && "ring-2 ring-red-400")}
+          onClick={() => setUrgencyFilter('critical')}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
               <div>
-                <p className="text-sm text-gray-500">안전재고 미달</p>
-                <p className="text-2xl font-bold text-red-600">{stats.belowSafety}</p>
+                <p className="text-xs text-gray-500">긴급</p>
+                <p className="text-xl font-bold text-red-600">{urgencyCounts.critical}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-orange-600" />
-              </div>
+        <Card
+          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'high' && "ring-2 ring-orange-400")}
+          onClick={() => setUrgencyFilter('high')}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-orange-500" />
               <div>
-                <p className="text-sm text-gray-500">긴급 생산 필요</p>
-                <p className="text-2xl font-bold text-orange-600">{stats.critical}</p>
+                <p className="text-xs text-gray-500">우선</p>
+                <p className="text-xl font-bold text-orange-600">{urgencyCounts.high}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <PackageX className="h-5 w-5 text-gray-600" />
-              </div>
+        <Card
+          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'medium' && "ring-2 ring-yellow-400")}
+          onClick={() => setUrgencyFilter('medium')}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-yellow-500" />
               <div>
-                <p className="text-sm text-gray-500">악성재고 의심</p>
-                <p className="text-2xl font-bold text-gray-600">{stats.deadStock}</p>
+                <p className="text-xs text-gray-500">주의</p>
+                <p className="text-xl font-bold text-yellow-600">{urgencyCounts.medium}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <Ban className="h-5 w-5 text-gray-400" />
-              </div>
+        <Card
+          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'low' && "ring-2 ring-green-400")}
+          onClick={() => setUrgencyFilter('low')}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
               <div>
-                <p className="text-sm text-gray-500">판매중단</p>
-                <p className="text-2xl font-bold text-gray-400">{stats.discontinued}</p>
+                <p className="text-xs text-gray-500">양호</p>
+                <p className="text-xl font-bold text-green-600">{urgencyCounts.low}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card
+          className={cn("cursor-pointer hover:shadow-md transition-all", urgencyFilter === 'discontinued' && "ring-2 ring-gray-400")}
+          onClick={() => setUrgencyFilter('discontinued')}
+        >
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-2">
+              <Ban className="h-4 w-4 text-gray-400" />
+              <div>
+                <p className="text-xs text-gray-500">판매중단</p>
+                <p className="text-xl font-bold text-gray-400">{urgencyCounts.discontinued}</p>
               </div>
             </div>
           </CardContent>
@@ -599,6 +633,12 @@ export default function SafetyStockPage() {
           value={daysFilter}
           options={DAYS_FILTER_OPTIONS.map((o, i) => ({ key: String(i), label: o.label }))}
           onChange={(v) => setDaysFilter(v)}
+        />
+        <Dropdown
+          label="추세"
+          value={trendFilter}
+          options={TREND_FILTER_OPTIONS.map(o => ({ key: o.key, label: o.label, dotColor: o.dotColor }))}
+          onChange={(v) => setTrendFilter(v)}
         />
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -740,7 +780,7 @@ export default function SafetyStockPage() {
                 {displayed.length === 0 && (
                   <tr>
                     <td colSpan={12} className="p-8 text-center text-gray-500">
-                      {search || urgencyFilter !== 'all' || daysFilter !== '0' ? '검색 결과가 없습니다.' : '데이터가 없습니다.'}
+                      {search || urgencyFilter !== 'all' || daysFilter !== '0' || trendFilter !== 'all' ? '검색 결과가 없습니다.' : '데이터가 없습니다.'}
                     </td>
                   </tr>
                 )}

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { useFactory } from '@/contexts/factory-context'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { DetailPopup } from '@/components/common/detail-popup'
 import { formatNumber } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import {
@@ -40,13 +41,10 @@ interface ShipmentRaw {
   customer_name: string
 }
 
-type PeriodKey = '7d' | '30d' | '90d'
-
-const PERIOD_OPTIONS: { key: PeriodKey; label: string; days: number }[] = [
-  { key: '7d', label: '7일', days: 7 },
-  { key: '30d', label: '30일', days: 30 },
-  { key: '90d', label: '90일', days: 90 },
-]
+interface DetailPopupState {
+  open: boolean
+  type?: 'totalQty' | 'totalOrders' | 'avgDaily' | 'customers' | 'products'
+}
 
 const CUSTOMER_COLORS = [
   '#3b82f6', '#f97316', '#10b981', '#8b5cf6', '#ef4444',
@@ -57,25 +55,50 @@ export default function ShipmentDashboardPage() {
   const { factory } = useFactory()
   const [shipments, setShipments] = useState<ShipmentRaw[]>([])
   const [loading, setLoading] = useState(true)
-  const [period, setPeriod] = useState<PeriodKey>('30d')
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+  const [selectedCustomer, setSelectedCustomer] = useState<string>('')
+  const [selectedProduct, setSelectedProduct] = useState<string>('')
+  const [detailPopup, setDetailPopup] = useState<DetailPopupState>({ open: false })
+
+  const dateFormatISO = (date: Date): string => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+
+  const dateFormatDisplay = (date: Date): string => {
+    return date.toISOString().split('T')[0]
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const today = new Date()
-      const dAgo = new Date(today)
-      dAgo.setDate(dAgo.getDate() - 90) // Always fetch 90 days, filter client-side
-      const dStr = `${dAgo.getFullYear()}-${String(dAgo.getMonth() + 1).padStart(2, '0')}-${String(dAgo.getDate()).padStart(2, '0')}`
-
       const { data, error } = await supabase
         .from('fact_shipment')
         .select('shipment_date, product_code, product_name, shipped_qty, customer_name')
         .eq('factory', factory)
-        .gte('shipment_date', dStr)
-        .order('shipment_date')
+        .order('shipment_date', { ascending: false })
+        .limit(1)
 
       if (error) throw error
-      setShipments(data || [])
+
+      if (data && data.length > 0) {
+        const latestDate = new Date(data[0].shipment_date)
+        setEndDate(dateFormatDisplay(latestDate))
+
+        const oneMonthAgo = new Date(latestDate)
+        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+        setStartDate(dateFormatDisplay(oneMonthAgo))
+      }
+
+      // Fetch all data for filtering
+      const { data: allData, error: fetchError } = await supabase
+        .from('fact_shipment')
+        .select('shipment_date, product_code, product_name, shipped_qty, customer_name')
+        .eq('factory', factory)
+        .order('shipment_date')
+
+      if (fetchError) throw fetchError
+      setShipments(allData || [])
     } catch (err) {
       console.error('Failed to fetch shipment data:', err)
     } finally {
@@ -87,15 +110,26 @@ export default function ShipmentDashboardPage() {
     fetchData()
   }, [fetchData])
 
-  // Filter by period
+  // Filter by date range and dropdowns
   const filteredShipments = useMemo(() => {
-    const days = PERIOD_OPTIONS.find(p => p.key === period)?.days || 30
-    const today = new Date()
-    const dAgo = new Date(today)
-    dAgo.setDate(dAgo.getDate() - days)
-    const dStr = `${dAgo.getFullYear()}-${String(dAgo.getMonth() + 1).padStart(2, '0')}-${String(dAgo.getDate()).padStart(2, '0')}`
-    return shipments.filter(s => s.shipment_date >= dStr)
-  }, [shipments, period])
+    return shipments.filter(s => {
+      const dateOk = (!startDate || s.shipment_date >= startDate) && (!endDate || s.shipment_date <= endDate)
+      const customerOk = !selectedCustomer || s.customer_name === selectedCustomer
+      const productOk = !selectedProduct || s.product_code === selectedProduct
+      return dateOk && customerOk && productOk
+    })
+  }, [shipments, startDate, endDate, selectedCustomer, selectedProduct])
+
+  // Get unique customers and products for dropdowns
+  const availableCustomers = useMemo(() => {
+    const set = new Set(shipments.map(s => s.customer_name))
+    return Array.from(set).sort()
+  }, [shipments])
+
+  const availableProducts = useMemo(() => {
+    const set = new Set(shipments.map(s => s.product_code))
+    return Array.from(set).sort()
+  }, [shipments])
 
   // KPI stats
   const stats = useMemo(() => {
@@ -103,17 +137,23 @@ export default function ShipmentDashboardPage() {
     const totalOrders = filteredShipments.length
     const customers = new Set(filteredShipments.map(r => r.customer_name))
     const products = new Set(filteredShipments.map(r => r.product_code))
-    const days = PERIOD_OPTIONS.find(p => p.key === period)?.days || 30
-    const avgDaily = totalQty / days
+
+    let avgDaily = 0
+    if (startDate && endDate) {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      avgDaily = Math.round(totalQty / Math.max(days, 1))
+    }
 
     return {
       totalQty,
       totalOrders,
       customerCount: customers.size,
       productCount: products.size,
-      avgDaily: Math.round(avgDaily),
+      avgDaily,
     }
-  }, [filteredShipments, period])
+  }, [filteredShipments, startDate, endDate])
 
   // Customer breakdown
   const customerData = useMemo(() => {
@@ -150,28 +190,31 @@ export default function ShipmentDashboardPage() {
     }
 
     // Fill all dates in range
-    const days = PERIOD_OPTIONS.find(p => p.key === period)?.days || 30
-    const today = new Date()
     const allDates: any[] = []
 
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(today)
-      d.setDate(d.getDate() - i)
-      const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-      const entry: any = {
-        date: ds.slice(5), // MM-DD
-        fullDate: ds,
-        total: 0,
+    if (startDate && endDate) {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      const current = new Date(start)
+
+      while (current <= end) {
+        const ds = dateFormatISO(current)
+        const entry: any = {
+          date: ds.slice(5), // MM-DD
+          fullDate: ds,
+          total: 0,
+        }
+        for (const c of customers) {
+          entry[c] = dateMap[ds]?.[c] || 0
+          entry.total += entry[c]
+        }
+        allDates.push(entry)
+        current.setDate(current.getDate() + 1)
       }
-      for (const c of customers) {
-        entry[c] = dateMap[ds]?.[c] || 0
-        entry.total += entry[c]
-      }
-      allDates.push(entry)
     }
 
     return { data: allDates, customers: Array.from(customers) }
-  }, [filteredShipments, period])
+  }, [filteredShipments, startDate, endDate])
 
   // Top products by shipment qty
   const topProducts = useMemo(() => {
@@ -207,6 +250,91 @@ export default function ShipmentDashboardPage() {
     })
   }, [filteredShipments, customerData, topProducts])
 
+  // Detail popup data generators
+  const getDetailData = (type: DetailPopupState['type']): Array<Record<string, string>> => {
+    switch (type) {
+      case 'totalQty': {
+        const productQty: Record<string, number> = {}
+        for (const s of filteredShipments) {
+          productQty[s.product_name] = (productQty[s.product_name] || 0) + (s.shipped_qty || 0)
+        }
+        return Object.entries(productQty)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, qty]) => ({ product: name, quantity: formatNumber(qty) }))
+      }
+      case 'totalOrders': {
+        const dailyOrders: Record<string, number> = {}
+        for (const s of filteredShipments) {
+          dailyOrders[s.shipment_date] = (dailyOrders[s.shipment_date] || 0) + 1
+        }
+        return Object.entries(dailyOrders)
+          .sort((a, b) => b[1] - a[1])
+          .map(([date, count]) => ({ date, orders: formatNumber(count) }))
+      }
+      case 'avgDaily': {
+        const dailyQty: Record<string, number> = {}
+        for (const s of filteredShipments) {
+          dailyQty[s.shipment_date] = (dailyQty[s.shipment_date] || 0) + (s.shipped_qty || 0)
+        }
+        return Object.entries(dailyQty)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([date, qty]) => ({ date, quantity: formatNumber(qty) }))
+      }
+      case 'customers': {
+        const customerQty: Record<string, number> = {}
+        for (const s of filteredShipments) {
+          customerQty[s.customer_name] = (customerQty[s.customer_name] || 0) + (s.shipped_qty || 0)
+        }
+        return Object.entries(customerQty)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, qty]) => ({ customer: name, quantity: formatNumber(qty) }))
+      }
+      case 'products': {
+        const productQty: Record<string, number> = {}
+        for (const s of filteredShipments) {
+          productQty[s.product_name] = (productQty[s.product_name] || 0) + (s.shipped_qty || 0)
+        }
+        return Object.entries(productQty)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, qty]) => ({ product: name, quantity: formatNumber(qty) }))
+      }
+      default:
+        return []
+    }
+  }
+
+  const getDetailColumns = (type: DetailPopupState['type']) => {
+    switch (type) {
+      case 'totalQty':
+        return [
+          { key: 'product', label: '제품' },
+          { key: 'quantity', label: '출하량' },
+        ]
+      case 'totalOrders':
+        return [
+          { key: 'date', label: '날짜' },
+          { key: 'orders', label: '건수' },
+        ]
+      case 'avgDaily':
+        return [
+          { key: 'date', label: '날짜' },
+          { key: 'quantity', label: '출하량' },
+        ]
+      case 'customers':
+        return [
+          { key: 'customer', label: '고객사' },
+          { key: 'quantity', label: '출하량' },
+        ]
+      case 'products':
+        return [
+          { key: 'product', label: '제품' },
+          { key: 'quantity', label: '출하량' },
+        ]
+      default:
+        return []
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -217,32 +345,142 @@ export default function ShipmentDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">출하량 대시보드</h1>
-          <p className="text-gray-600 mt-2">고객사별 출하 현황 및 추세를 분석합니다.</p>
-        </div>
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-          {PERIOD_OPTIONS.map(opt => (
-            <button
-              key={opt.key}
-              onClick={() => setPeriod(opt.key)}
-              className={cn(
-                'px-3 py-1.5 rounded-md text-sm font-medium transition-all',
-                period === opt.key
-                  ? 'bg-white shadow-sm text-gray-900'
-                  : 'text-gray-500 hover:text-gray-700'
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+      {/* Detail Popup */}
+      <DetailPopup
+        open={detailPopup.open}
+        onOpenChange={(open) => setDetailPopup({ ...detailPopup, open })}
+        title={
+          detailPopup.type === 'totalQty' ? '총 출하량 상세'
+            : detailPopup.type === 'totalOrders' ? '출하 건수 상세'
+            : detailPopup.type === 'avgDaily' ? '일별 출하량'
+            : detailPopup.type === 'customers' ? '고객사별 출하'
+            : detailPopup.type === 'products' ? '제품별 출하'
+            : '상세'
+        }
+        columns={getDetailColumns(detailPopup.type)}
+        data={getDetailData(detailPopup.type)}
+      />
+
+      <div>
+        <h1 className="text-3xl font-bold">출하량 대시보드</h1>
+        <p className="text-gray-600 mt-2">고객사별 출하 현황 및 추세를 분석합니다.</p>
       </div>
+
+      {/* Date Range Filter */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            기간 선택
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={startDate && endDate && Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) === 30 ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                const end = new Date()
+                const start = new Date(end)
+                start.setMonth(start.getMonth() - 1)
+                setStartDate(dateFormatDisplay(start))
+                setEndDate(dateFormatDisplay(end))
+              }}
+            >
+              1개월
+            </Button>
+            <Button
+              variant={startDate && endDate && Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) === 90 ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                const end = new Date()
+                const start = new Date(end)
+                start.setMonth(start.getMonth() - 3)
+                setStartDate(dateFormatDisplay(start))
+                setEndDate(dateFormatDisplay(end))
+              }}
+            >
+              3개월
+            </Button>
+            <Button
+              variant={startDate && endDate && Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) === 180 ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                const end = new Date()
+                const start = new Date(end)
+                start.setMonth(start.getMonth() - 6)
+                setStartDate(dateFormatDisplay(start))
+                setEndDate(dateFormatDisplay(end))
+              }}
+            >
+              6개월
+            </Button>
+          </div>
+
+          <div className="flex gap-4 items-end">
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">시작일</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm font-medium mb-1">종료일</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Customer and Product Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">필터</CardTitle>
+        </CardHeader>
+        <CardContent className="flex gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">고객사</label>
+            <select
+              value={selectedCustomer}
+              onChange={(e) => setSelectedCustomer(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">전체</option>
+              {availableCustomers.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">제품</label>
+            <select
+              value={selectedProduct}
+              onChange={(e) => setSelectedProduct(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md text-sm"
+            >
+              <option value="">전체</option>
+              {availableProducts.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setDetailPopup({ open: true, type: 'totalQty' })}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-blue-100 rounded-lg">
@@ -255,7 +493,10 @@ export default function ShipmentDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setDetailPopup({ open: true, type: 'totalOrders' })}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-green-100 rounded-lg">
@@ -268,7 +509,10 @@ export default function ShipmentDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setDetailPopup({ open: true, type: 'avgDaily' })}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-purple-100 rounded-lg">
@@ -281,7 +525,10 @@ export default function ShipmentDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setDetailPopup({ open: true, type: 'customers' })}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-orange-100 rounded-lg">
@@ -294,7 +541,10 @@ export default function ShipmentDashboardPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card
+          className="cursor-pointer hover:shadow-lg transition-shadow"
+          onClick={() => setDetailPopup({ open: true, type: 'products' })}
+        >
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-cyan-100 rounded-lg">
@@ -325,7 +575,7 @@ export default function ShipmentDashboardPage() {
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 10 }}
-                  interval={period === '7d' ? 0 : period === '30d' ? 2 : 6}
+                  interval={dailyTrendData.data.length > 60 ? 6 : dailyTrendData.data.length > 30 ? 2 : 0}
                 />
                 <YAxis tick={{ fontSize: 11 }} width={60} tickFormatter={(v) => formatNumber(v)} />
                 <Tooltip
@@ -356,10 +606,10 @@ export default function ShipmentDashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Two-column: Customer Qty + Customer Orders */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Customer by Qty */}
-        <Card>
+      {/* Customer Qty + Customer Orders (Qty Pie + Order Count Pie) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Customer by Qty Bar Chart */}
+        <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-4 w-4" />
@@ -381,12 +631,12 @@ export default function ShipmentDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Customer Pie Chart */}
+        {/* Customer Qty Pie Chart */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
-              고객사별 출하 비중
+              고객사별 출하 비중(출하량)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -408,6 +658,39 @@ export default function ShipmentDashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: number) => [formatNumber(value), '출하량']} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Customer Order Count Pie Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              고객사별 출하 비중(매출건수)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={customerOrderData}
+                    dataKey="count"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    labelLine={true}
+                  >
+                    {customerOrderData.map((_, i) => (
+                      <Cell key={i} fill={CUSTOMER_COLORS[i % CUSTOMER_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => [formatNumber(value), '건수']} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

@@ -85,6 +85,26 @@ interface WorkerDetail {
   equipment_name: string | null
 }
 
+interface DefectDetail {
+  equipment_name: string
+  produced_qty: number
+  defect_qty: number
+  defect_rate: number
+}
+
+interface LastYearCompareDetail {
+  equipment_name: string
+  thisYearQty: number
+  lastYearQty: number
+  change: number
+}
+
+interface DailyProductionData {
+  date: string
+  equipment_name: string
+  finished_qty: number
+}
+
 export default function Dashboard() {
   const { factory } = useFactory()
   const [activePreset, setActivePreset] = useState<PresetType>("1month")
@@ -112,6 +132,11 @@ export default function Dashboard() {
   const [equipmentDetails, setEquipmentDetails] = useState<EquipmentDetail[]>([])
   const [workerDetails, setWorkerDetails] = useState<WorkerDetail[]>([])
   const [totalEquipmentCount, setTotalEquipmentCount] = useState(0)
+  const [defectDetails, setDefectDetails] = useState<DefectDetail[]>([])
+  const [lastYearCompareDetails, setLastYearCompareDetails] = useState<LastYearCompareDetail[]>([])
+  const [dailyProductionRaw, setDailyProductionRaw] = useState<DailyProductionData[]>([])
+  const [equipCapacities, setEquipCapacities] = useState<Record<string, number>>({})
+  const [equipNameMap, setEquipNameMap] = useState<Record<string, string>>({})
 
   const applyPreset = (preset: PresetType, baseDate: string) => {
     if (preset === "custom") return
@@ -207,6 +232,23 @@ export default function Dashboard() {
       const lastYearStartStr = lastYearStart.toISOString().split("T")[0]
       const lastYearEndStr = lastYearEnd.toISOString().split("T")[0]
 
+      // Fetch equipment name mapping (name_legacy -> name_official)
+      const { data: equipNames } = await supabase
+        .from("dim_equipment")
+        .select("name_legacy, name_official, name_short")
+        .eq("factory", factory)
+
+      const nameMap: Record<string, string> = {}
+      ;(equipNames || []).forEach((e) => {
+        if (e.name_legacy) {
+          nameMap[e.name_legacy] = e.name_official || e.name_short || e.name_legacy
+        }
+      })
+      setEquipNameMap(nameMap)
+
+      const mapName = (name: string | null): string | null =>
+        name ? (nameMap[name] || name) : name
+
       // Fetch total equipment count
       const { data: allEquipment } = await supabase
         .from("dim_equipment")
@@ -226,7 +268,7 @@ export default function Dashboard() {
       // Fetch last year same period data
       const { data: lastYearData } = await supabase
         .from("fact_production")
-        .select("finished_qty")
+        .select("finished_qty, equipment_name")
         .eq("factory", factory)
         .gte("production_date", lastYearStartStr)
         .lte("production_date", lastYearEndStr)
@@ -239,9 +281,10 @@ export default function Dashboard() {
       // Production details for popup (period-based aggregation)
       const prodDetailMap = new Map<string, { product_name: string | null; equipment_name: string | null; finished_qty: number }>()
       ;(periodData || []).forEach(row => {
-        const key = `${row.equipment_name}___${row.product_name}`
+        const mappedEquipName = mapName(row.equipment_name)
+        const key = `${mappedEquipName}___${row.product_name}`
         if (!prodDetailMap.has(key)) {
-          prodDetailMap.set(key, { product_name: row.product_name, equipment_name: row.equipment_name, finished_qty: 0 })
+          prodDetailMap.set(key, { product_name: row.product_name, equipment_name: mappedEquipName, finished_qty: 0 })
         }
         prodDetailMap.get(key)!.finished_qty += row.finished_qty || 0
       })
@@ -258,10 +301,11 @@ export default function Dashboard() {
       const equipMap = new Map<string, { product_name: string | null; finished_qty: number }>()
       ;(periodData || []).forEach(row => {
         if (row.equipment_name && (row.finished_qty || 0) > 0) {
-          if (!equipMap.has(row.equipment_name)) {
-            equipMap.set(row.equipment_name, { product_name: null, finished_qty: 0 })
+          const mappedEquipName = mapName(row.equipment_name)
+          if (!equipMap.has(mappedEquipName)) {
+            equipMap.set(mappedEquipName, { product_name: null, finished_qty: 0 })
           }
-          const entry = equipMap.get(row.equipment_name)!
+          const entry = equipMap.get(mappedEquipName)!
           entry.finished_qty += row.finished_qty || 0
         }
       })
@@ -274,13 +318,14 @@ export default function Dashboard() {
       // Worker details for popup (from period data)
       const workerMap = new Map<string, { role: string; equipment_name: string | null }>()
       ;(periodData || []).forEach(row => {
+        const mappedEquipName = mapName(row.equipment_name)
         if (row.tech_worker) {
-          workerMap.set(row.tech_worker, { role: "기술자", equipment_name: row.equipment_name })
+          workerMap.set(row.tech_worker, { role: "기술자", equipment_name: mappedEquipName })
         }
         if (row.pack_workers) {
           row.pack_workers.split(/[,/]/).forEach((w: string) => {
             const name = w.trim()
-            if (name) workerMap.set(name, { role: "포장", equipment_name: row.equipment_name })
+            if (name) workerMap.set(name, { role: "포장", equipment_name: mappedEquipName })
           })
         }
       })
@@ -295,9 +340,63 @@ export default function Dashboard() {
       const totalDefects = (periodData || []).reduce((sum, row) => sum + (row.defect_qty || 0), 0)
       const defectRate = totalProduced > 0 ? totalDefects / totalProduced : 0
 
+      // Defect details by equipment
+      const defectMap = new Map<string, { produced_qty: number; defect_qty: number }>()
+      ;(periodData || []).forEach(row => {
+        const mappedEquipName = mapName(row.equipment_name)
+        if (mappedEquipName) {
+          if (!defectMap.has(mappedEquipName)) {
+            defectMap.set(mappedEquipName, { produced_qty: 0, defect_qty: 0 })
+          }
+          const entry = defectMap.get(mappedEquipName)!
+          entry.produced_qty += row.produced_qty || 0
+          entry.defect_qty += row.defect_qty || 0
+        }
+      })
+      const defectDetailsList: DefectDetail[] = []
+      defectMap.forEach((val, key) => {
+        const rate = val.produced_qty > 0 ? val.defect_qty / val.produced_qty : 0
+        defectDetailsList.push({
+          equipment_name: key,
+          produced_qty: val.produced_qty,
+          defect_qty: val.defect_qty,
+          defect_rate: rate,
+        })
+      })
+      setDefectDetails(defectDetailsList)
+
       // KPI 4: Year-over-year change (last 30 days vs same period last year)
       const thisPeriodTotal = (periodData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
       const lastYearTotal = (lastYearData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
+
+      // Last year compare details by equipment
+      const thisYearMap = new Map<string, number>()
+      ;(periodData || []).forEach(row => {
+        const mappedEquipName = mapName(row.equipment_name)
+        if (mappedEquipName) {
+          thisYearMap.set(mappedEquipName, (thisYearMap.get(mappedEquipName) || 0) + (row.finished_qty || 0))
+        }
+      })
+
+      const lastYearMap = new Map<string, number>()
+      ;(lastYearData || []).forEach(row => {
+        const mappedEquipName = mapName(row.equipment_name)
+        if (mappedEquipName) {
+          lastYearMap.set(mappedEquipName, (lastYearMap.get(mappedEquipName) || 0) + (row.finished_qty || 0))
+        }
+      })
+
+      const allEquipmentNames = new Set([...thisYearMap.keys(), ...lastYearMap.keys()])
+      const compareDetailsList: LastYearCompareDetail[] = []
+      allEquipmentNames.forEach(equipName => {
+        compareDetailsList.push({
+          equipment_name: equipName,
+          thisYearQty: thisYearMap.get(equipName) || 0,
+          lastYearQty: lastYearMap.get(equipName) || 0,
+          change: (thisYearMap.get(equipName) || 0) - (lastYearMap.get(equipName) || 0),
+        })
+      })
+      setLastYearCompareDetails(compareDetailsList)
 
       // Period labels
       const periodLabel = `${formatShortDate(periodStartStr)} ~ ${formatShortDate(periodEndStr)}`
@@ -327,6 +426,22 @@ export default function Dashboard() {
       const endDate = chartEndDate
       const daysBack = getChartDaysBack()
 
+      // Fetch equipment name mapping
+      const { data: equipNames } = await supabase
+        .from("dim_equipment")
+        .select("name_legacy, name_official, name_short")
+        .eq("factory", factory)
+
+      const nameMap: Record<string, string> = {}
+      ;(equipNames || []).forEach((e) => {
+        if (e.name_legacy) {
+          nameMap[e.name_legacy] = e.name_official || e.name_short || e.name_legacy
+        }
+      })
+
+      const mapName = (name: string | null): string | null =>
+        name ? (nameMap[name] || name) : name
+
       const { data: productionData } = await supabase
         .from("fact_production")
         .select("*")
@@ -337,6 +452,14 @@ export default function Dashboard() {
 
       if (!productionData) return
 
+      // Store raw daily production data for utilization chart
+      const dailyProductionData: DailyProductionData[] = productionData.map((row) => ({
+        date: row.production_date || "",
+        equipment_name: mapName(row.equipment_name) || "",
+        finished_qty: row.finished_qty || 0,
+      }))
+      setDailyProductionRaw(dailyProductionData)
+
       // Daily trend
       const dailyMap = new Map<string, DailyProduction>()
       productionData.forEach((row) => {
@@ -344,14 +467,14 @@ export default function Dashboard() {
         if (!dailyMap.has(date)) dailyMap.set(date, { date, total: 0, details: [] })
         const entry = dailyMap.get(date)!
         entry.total += row.finished_qty || 0
-        entry.details.push({ date, product_name: row.product_name, finished_qty: row.finished_qty || 0, equipment_name: row.equipment_name })
+        entry.details.push({ date, product_name: row.product_name, finished_qty: row.finished_qty || 0, equipment_name: mapName(row.equipment_name) })
       })
       setDailyTrendData(Array.from(dailyMap.values()))
 
       // Equipment production (uses full period data)
       const equipmentMap = new Map<string, EquipmentProduction>()
       productionData.forEach((row) => {
-        const equipName = row.equipment_name || "미지정"
+        const equipName = mapName(row.equipment_name) || "미지정"
         if (!equipmentMap.has(equipName)) equipmentMap.set(equipName, { equipment_name: equipName, total: 0, details: [] })
         const entry = equipmentMap.get(equipName)!
         entry.total += row.finished_qty || 0
@@ -376,18 +499,26 @@ export default function Dashboard() {
         .select("equipment_name, daily_max_qty")
         .eq("factory", factory)
 
+      // Build equipment capacities map
+      const capacitiesMap: Record<string, number> = {}
+      ;(productDims || []).forEach((p) => {
+        const mappedName = mapName(p.equipment_name) || p.equipment_name
+        capacitiesMap[mappedName] = p.daily_max_qty || 0
+      })
+      setEquipCapacities(capacitiesMap)
+
       // Equipment utilization: totalActual / (daily_max_qty * periodDays)
       const periodDays = daysBack
       const utilMap = new Map<string, { actual: number }>()
       productionData.forEach((row) => {
-        const equipName = row.equipment_name || "미지정"
+        const equipName = mapName(row.equipment_name) || "미지정"
         if (!utilMap.has(equipName)) utilMap.set(equipName, { actual: 0 })
         utilMap.get(equipName)!.actual += row.finished_qty || 0
       })
 
       const utilData: EquipmentUtil[] = []
       utilMap.forEach((value, equipName) => {
-        const maxQty = productDims?.find((p) => p.equipment_name === equipName)?.daily_max_qty || 0
+        const maxQty = productDims?.find((p) => (mapName(p.equipment_name) || p.equipment_name) === equipName)?.daily_max_qty || 0
         // capacity = daily_max_qty * period days
         const totalCapacity = maxQty * periodDays
         utilData.push({ equipment_name: equipName, actual: value.actual, capacity: totalCapacity })
@@ -473,9 +604,12 @@ export default function Dashboard() {
           <KPICards
             {...kpiData}
             latestDate={latestDate}
+            periodDays={getChartDaysBack()}
             productionDetails={productionDetails}
             equipmentDetails={equipmentDetails}
             workerDetails={workerDetails}
+            defectDetails={defectDetails}
+            lastYearCompareDetails={lastYearCompareDetails}
             totalEquipmentCount={totalEquipmentCount}
             factory={factory}
           />
@@ -484,7 +618,7 @@ export default function Dashboard() {
             <DailyTrendChart data={dailyTrendData as any} />
             <EquipmentProductionChart data={equipmentProductionData as any} />
             <ProductMixChart data={productMixData as any} />
-            <EquipmentUtilizationChart data={equipmentUtilData as any} />
+            <EquipmentUtilizationChart data={equipmentUtilData as any} dailyData={dailyProductionRaw} equipCapacities={equipCapacities} />
           </div>
 
           <div className="mt-6">
