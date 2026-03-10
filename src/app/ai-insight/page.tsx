@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -236,9 +237,72 @@ export default function AIInsightPage() {
         <Card className="overflow-hidden">
           <div
             ref={contentRef}
-            className="prose prose-sm max-w-none overflow-y-auto p-6 max-h-[700px]"
+            className="overflow-y-auto p-6 md:p-8 max-h-[700px]"
           >
-            <ReactMarkdown>{markdown}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                h1: ({ children, ...props }) => (
+                  <h1 className="text-2xl font-bold text-gray-900 mt-6 mb-3 pb-2 border-b border-gray-200" {...props}>{children}</h1>
+                ),
+                h2: ({ children, ...props }) => (
+                  <h2 className="text-xl font-bold text-gray-900 mt-8 mb-3 pb-2 border-b border-gray-200" {...props}>{children}</h2>
+                ),
+                h3: ({ children, ...props }) => (
+                  <h3 className="text-lg font-semibold text-gray-800 mt-5 mb-2" {...props}>{children}</h3>
+                ),
+                h4: ({ children, ...props }) => (
+                  <h4 className="text-base font-semibold text-gray-700 mt-4 mb-2" {...props}>{children}</h4>
+                ),
+                p: ({ children, ...props }) => (
+                  <p className="text-sm text-gray-700 leading-relaxed mb-3" {...props}>{children}</p>
+                ),
+                ul: ({ children, ...props }) => (
+                  <ul className="list-disc pl-6 mb-3 space-y-1 text-sm text-gray-700" {...props}>{children}</ul>
+                ),
+                ol: ({ children, ...props }) => (
+                  <ol className="list-decimal pl-6 mb-3 space-y-1 text-sm text-gray-700" {...props}>{children}</ol>
+                ),
+                li: ({ children, ...props }) => (
+                  <li className="leading-relaxed" {...props}>{children}</li>
+                ),
+                strong: ({ children, ...props }) => (
+                  <strong className="font-bold text-gray-900" {...props}>{children}</strong>
+                ),
+                blockquote: ({ children, ...props }) => (
+                  <blockquote className="border-l-4 border-blue-400 bg-blue-50 pl-4 py-2 my-3 text-sm text-gray-700 italic" {...props}>{children}</blockquote>
+                ),
+                table: ({ children, ...props }) => (
+                  <div className="overflow-x-auto my-4 rounded-lg border border-gray-200">
+                    <table className="min-w-full text-sm" {...props}>
+                      {children}
+                    </table>
+                  </div>
+                ),
+                thead: ({ children, ...props }) => (
+                  <thead className="bg-gray-100 border-b border-gray-200" {...props}>{children}</thead>
+                ),
+                th: ({ children, ...props }) => (
+                  <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" {...props}>{children}</th>
+                ),
+                td: ({ children, ...props }) => (
+                  <td className="px-4 py-2 text-gray-700 border-t border-gray-100" {...props}>{children}</td>
+                ),
+                tr: ({ children, ...props }) => (
+                  <tr className="even:bg-gray-50 hover:bg-gray-100 transition-colors" {...props}>{children}</tr>
+                ),
+                hr: ({ ...props }) => (
+                  <hr className="my-6 border-gray-200" {...props} />
+                ),
+                code: ({ children, className, ...props }) => {
+                  const isBlock = className?.includes('language-')
+                  if (isBlock) {
+                    return <code className={`block bg-gray-900 text-green-400 p-4 rounded-lg text-xs overflow-x-auto my-3 ${className || ''}`} {...props}>{children}</code>
+                  }
+                  return <code className="bg-gray-100 text-red-600 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>{children}</code>
+                },
+              }}
+            >{markdown}</ReactMarkdown>
           </div>
         </Card>
       )}

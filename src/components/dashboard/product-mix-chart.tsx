@@ -60,7 +60,7 @@ export function ProductMixChart({ data }: ProductMixChartProps) {
           <CardTitle className="text-base">제품별 생산 비율 (상위 10)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto max-h-80">
+          <div>
             <Table className="text-sm">
               <TableHeader>
                 <TableRow className="bg-gray-50">

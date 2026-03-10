@@ -25,6 +25,13 @@ interface EquipmentProductionChartProps {
   }[]
 }
 
+// Format large numbers for y-axis: 100000 → 100K, 1000000 → 1M
+const formatYAxis = (value: number): string => {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+  if (value >= 1_000) return `${Math.round(value / 1_000)}K`
+  return String(value)
+}
+
 export function EquipmentProductionChart({
   data,
 }: EquipmentProductionChartProps) {
@@ -40,10 +47,13 @@ export function EquipmentProductionChart({
     ? data.find((d) => d.equipment_name === selectedEquipment)?.details || []
     : []
 
-  const chartData = data.map((d) => ({
-    equipment_name: d.equipment_name || "미지정",
-    total: d.total,
-  }))
+  // Sort by total production descending
+  const chartData = [...data]
+    .sort((a, b) => b.total - a.total)
+    .map((d) => ({
+      equipment_name: d.equipment_name || "미지정",
+      total: d.total,
+    }))
 
   return (
     <>
@@ -56,7 +66,7 @@ export function EquipmentProductionChart({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}
-                margin={{ top: 20, right: 30, left: 0, bottom: 60 }}
+                margin={{ top: 20, right: 20, left: 10, bottom: 60 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
@@ -66,7 +76,11 @@ export function EquipmentProductionChart({
                   height={100}
                   tick={{ fontSize: 11 }}
                 />
-                <YAxis />
+                <YAxis
+                  width={55}
+                  tickFormatter={formatYAxis}
+                  tick={{ fontSize: 11 }}
+                />
                 <Tooltip
                   formatter={(value) => (value ?? 0).toLocaleString("ko-KR")}
                   contentStyle={{

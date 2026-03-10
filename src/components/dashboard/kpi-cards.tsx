@@ -29,12 +29,13 @@ import {
 import { supabase } from "@/lib/supabase"
 
 interface KPICardsProps {
-  latestDayProduction: number
+  periodProduction: number
   operatingEquipment: number
   defectRate: number
-  monthChange: number
-  latestMonthLabel: string
-  prevMonthLabel: string
+  yearChange: number
+  periodLabel: string
+  lastYearPeriodLabel: string
+  defectPeriodLabel: string
   latestDate: string
   productionDetails: Array<{
     product_name: string | null
@@ -58,12 +59,13 @@ interface KPICardsProps {
 type EquipPopupPeriod = "1month" | "3months"
 
 export function KPICards({
-  latestDayProduction,
+  periodProduction,
   operatingEquipment,
   defectRate,
-  monthChange,
-  latestMonthLabel,
-  prevMonthLabel,
+  yearChange,
+  periodLabel,
+  lastYearPeriodLabel,
+  defectPeriodLabel,
   latestDate,
   productionDetails,
   equipmentDetails,
@@ -71,8 +73,7 @@ export function KPICards({
   totalEquipmentCount,
   factory,
 }: KPICardsProps) {
-  const isPositiveChange = monthChange >= 0
-  const dateLabel = latestDate ? latestDate.replace(/-/g, ". ") + "." : ""
+  const isPositiveChange = yearChange >= 0
 
   const [productionPopup, setProductionPopup] = useState(false)
   const [equipmentPopup, setEquipmentPopup] = useState(false)
@@ -146,16 +147,26 @@ export function KPICards({
     fetchEquipUtilData()
   }, [fetchEquipUtilData])
 
+  // Calculate year change percentage
+  const yearChangePercent = yearChange !== 0 && lastYearPeriodLabel
+    ? (() => {
+        // We don't have lastYearTotal directly, but we can derive it
+        // yearChange = thisTotal - lastYearTotal => lastYearTotal = thisTotal - yearChange
+        // We'd need thisTotal which we don't have, so just show absolute
+        return null
+      })()
+    : null
+
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setProductionPopup(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">최근일 생산량</CardTitle>
+            <CardTitle className="text-sm font-medium">기간내 생산량</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatNumber(latestDayProduction)}</div>
-            <p className="text-xs text-gray-500 mt-1">{dateLabel} 기준</p>
+            <div className="text-2xl font-bold">{formatNumber(periodProduction)}</div>
+            <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
           </CardContent>
         </Card>
 
@@ -168,29 +179,29 @@ export function KPICards({
               {operatingEquipment}
               <span className="text-sm text-gray-400 font-normal ml-1">/ {totalEquipmentCount}</span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">{dateLabel} 기준</p>
+            <p className="text-xs text-gray-500 mt-1">{periodLabel} 기간 내</p>
           </CardContent>
         </Card>
 
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setWorkerPopup(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">{latestMonthLabel} 불량률</CardTitle>
+            <CardTitle className="text-sm font-medium">불량률</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatPercent(defectRate)}</div>
-            <p className="text-xs text-gray-500 mt-1">{latestMonthLabel} 누적</p>
+            <p className="text-xs text-gray-500 mt-1">{defectPeriodLabel}</p>
           </CardContent>
         </Card>
 
         <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setEquipUtilPopup(true)}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">전월 대비 증감</CardTitle>
+            <CardTitle className="text-sm font-medium">작년 대비 증감</CardTitle>
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${isPositiveChange ? "text-green-600" : "text-red-600"}`}>
-              {isPositiveChange ? "+" : ""}{formatNumber(monthChange)}
+              {isPositiveChange ? "+" : ""}{formatNumber(yearChange)}
             </div>
-            <p className="text-xs text-gray-500 mt-1">{latestMonthLabel} vs {prevMonthLabel}</p>
+            <p className="text-xs text-gray-500 mt-1">직전 30일 vs 작년 동기간</p>
           </CardContent>
         </Card>
       </div>
@@ -199,7 +210,7 @@ export function KPICards({
       <DetailPopup
         open={productionPopup}
         onOpenChange={setProductionPopup}
-        title={`${dateLabel} 생산량 상세`}
+        title={`${periodLabel} 생산량 상세`}
         columns={[
           { key: "equipment_name", label: "설비명" },
           { key: "product_name", label: "제품명" },
@@ -216,15 +227,13 @@ export function KPICards({
       <DetailPopup
         open={equipmentPopup}
         onOpenChange={setEquipmentPopup}
-        title={`${dateLabel} 가동 설비 현황`}
+        title={`${periodLabel} 가동 설비 현황`}
         columns={[
           { key: "equipment_name", label: "설비명" },
-          { key: "product_name", label: "생산품명" },
-          { key: "finished_qty", label: "생산량" },
+          { key: "finished_qty", label: "기간 총 생산량" },
         ]}
         data={equipmentDetails.map(d => ({
           equipment_name: d.equipment_name,
-          product_name: d.product_name || "-",
           finished_qty: formatNumber(d.finished_qty),
         }))}
       />
@@ -233,7 +242,7 @@ export function KPICards({
       <DetailPopup
         open={workerPopup}
         onOpenChange={setWorkerPopup}
-        title={`${dateLabel} 작업 인원`}
+        title={`${periodLabel} 작업 인원`}
         columns={[
           { key: "name", label: "이름" },
           { key: "role", label: "역할" },

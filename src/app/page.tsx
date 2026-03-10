@@ -84,12 +84,13 @@ export default function Dashboard() {
   const [period, setPeriod] = useState<PeriodType>("1month")
   const [latestDate, setLatestDate] = useState<string>("")
   const [kpiData, setKpiData] = useState({
-    latestDayProduction: 0,
+    periodProduction: 0,
     operatingEquipment: 0,
     defectRate: 0,
-    monthChange: 0,
-    latestMonthLabel: "",
-    prevMonthLabel: "",
+    yearChange: 0,
+    periodLabel: "",
+    lastYearPeriodLabel: "",
+    defectPeriodLabel: "",
   })
   const [dailyTrendData, setDailyTrendData] = useState<DailyProduction[]>([])
   const [equipmentProductionData, setEquipmentProductionData] = useState<EquipmentProduction[]>([])
@@ -141,6 +142,11 @@ export default function Dashboard() {
     return `${year}년 ${week}주`
   }
 
+  // Format date as MM.DD
+  const formatShortDate = (dateStr: string) => {
+    return dateStr.slice(5).replace("-", ".")
+  }
+
   // Fetch the latest date with data on mount or factory change
   useEffect(() => {
     const fetchLatestDate = async () => {
@@ -167,17 +173,18 @@ export default function Dashboard() {
     if (!latestDate) return
 
     try {
-      const currentMonth = latestDate.substring(0, 7)
-      const prevMonthDate = new Date(latestDate + "T00:00:00")
-      prevMonthDate.setMonth(prevMonthDate.getMonth() - 1)
-      const prevMonth = prevMonthDate.toISOString().split("T")[0].substring(0, 7)
+      // Period: last 30 days from latestDate
+      const periodEnd = new Date(latestDate + "T00:00:00")
+      const periodStart = new Date(periodEnd.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const periodStartStr = periodStart.toISOString().split("T")[0]
 
-      // Fetch latest day data
-      const { data: latestDayData } = await supabase
-        .from("fact_production")
-        .select("finished_qty, equipment_name, product_name, tech_worker, pack_workers")
-        .eq("production_date", latestDate)
-        .eq("factory", factory)
+      // Last year same period
+      const lastYearEnd = new Date(periodEnd)
+      lastYearEnd.setFullYear(lastYearEnd.getFullYear() - 1)
+      const lastYearStart = new Date(periodStart)
+      lastYearStart.setFullYear(lastYearStart.getFullYear() - 1)
+      const lastYearStartStr = lastYearStart.toISOString().split("T")[0]
+      const lastYearEndStr = lastYearEnd.toISOString().split("T")[0]
 
       // Fetch total equipment count
       const { data: allEquipment } = await supabase
@@ -187,57 +194,54 @@ export default function Dashboard() {
 
       setTotalEquipmentCount(allEquipment?.length || 0)
 
-      // Fetch current month data
-      const { data: currentMonthData } = await supabase
+      // Fetch period data (last 30 days) - used for all KPIs
+      const { data: periodData } = await supabase
         .from("fact_production")
-        .select("finished_qty, produced_qty, defect_qty")
+        .select("finished_qty, produced_qty, defect_qty, equipment_name, product_name, tech_worker, pack_workers")
         .eq("factory", factory)
-        .gte("production_date", currentMonth + "-01")
+        .gte("production_date", periodStartStr)
         .lte("production_date", latestDate)
 
-      // Fetch previous month data
-      const prevMonthStart = prevMonth + "-01"
-      const prevMonthEnd = new Date(
-        parseInt(prevMonth.substring(0, 4)),
-        parseInt(prevMonth.substring(5, 7)),
-        0
-      ).toISOString().split("T")[0]
-
-      const { data: prevMonthData } = await supabase
+      // Fetch last year same period data
+      const { data: lastYearData } = await supabase
         .from("fact_production")
         .select("finished_qty")
         .eq("factory", factory)
-        .gte("production_date", prevMonthStart)
-        .lte("production_date", prevMonthEnd)
+        .gte("production_date", lastYearStartStr)
+        .lte("production_date", lastYearEndStr)
 
-      // KPI 1: Latest day production
-      const latestDayProduction = (latestDayData || []).reduce(
+      // KPI 1: Period total production (last 30 days)
+      const periodProduction = (periodData || []).reduce(
         (sum, row) => sum + (row.finished_qty || 0), 0
       )
 
-      // Production details for popup
-      setProductionDetails((latestDayData || []).map(row => ({
-        product_name: row.product_name,
-        equipment_name: row.equipment_name,
-        finished_qty: row.finished_qty || 0,
-      })))
+      // Production details for popup (period-based aggregation)
+      const prodDetailMap = new Map<string, { product_name: string | null; equipment_name: string | null; finished_qty: number }>()
+      ;(periodData || []).forEach(row => {
+        const key = `${row.equipment_name}___${row.product_name}`
+        if (!prodDetailMap.has(key)) {
+          prodDetailMap.set(key, { product_name: row.product_name, equipment_name: row.equipment_name, finished_qty: 0 })
+        }
+        prodDetailMap.get(key)!.finished_qty += row.finished_qty || 0
+      })
+      setProductionDetails(Array.from(prodDetailMap.values()))
 
-      // KPI 2: Operating equipment
-      const equipSet = new Set(
-        (latestDayData || [])
-          .filter(row => row.equipment_name)
+      // KPI 2: Operating equipment (within entire 30-day period)
+      const periodEquipSet = new Set(
+        (periodData || [])
+          .filter(row => row.equipment_name && (row.finished_qty || 0) > 0)
           .map(row => row.equipment_name)
       )
 
-      // Equipment details for popup
+      // Equipment details for popup (aggregate all period data)
       const equipMap = new Map<string, { product_name: string | null; finished_qty: number }>()
-      ;(latestDayData || []).forEach(row => {
-        if (row.equipment_name) {
+      ;(periodData || []).forEach(row => {
+        if (row.equipment_name && (row.finished_qty || 0) > 0) {
           if (!equipMap.has(row.equipment_name)) {
-            equipMap.set(row.equipment_name, { product_name: row.product_name, finished_qty: row.finished_qty || 0 })
-          } else {
-            equipMap.get(row.equipment_name)!.finished_qty += row.finished_qty || 0
+            equipMap.set(row.equipment_name, { product_name: null, finished_qty: 0 })
           }
+          const entry = equipMap.get(row.equipment_name)!
+          entry.finished_qty += row.finished_qty || 0
         }
       })
       const eDetails: EquipmentDetail[] = []
@@ -246,9 +250,9 @@ export default function Dashboard() {
       })
       setEquipmentDetails(eDetails)
 
-      // Worker details for popup
+      // Worker details for popup (from period data)
       const workerMap = new Map<string, { role: string; equipment_name: string | null }>()
-      ;(latestDayData || []).forEach(row => {
+      ;(periodData || []).forEach(row => {
         if (row.tech_worker) {
           workerMap.set(row.tech_worker, { role: "기술자", equipment_name: row.equipment_name })
         }
@@ -265,25 +269,27 @@ export default function Dashboard() {
       })
       setWorkerDetails(wDetails)
 
-      // KPI 3: Defect rate
-      const totalProduced = (currentMonthData || []).reduce((sum, row) => sum + (row.produced_qty || 0), 0)
-      const totalDefects = (currentMonthData || []).reduce((sum, row) => sum + (row.defect_qty || 0), 0)
+      // KPI 3: Defect rate (period)
+      const totalProduced = (periodData || []).reduce((sum, row) => sum + (row.produced_qty || 0), 0)
+      const totalDefects = (periodData || []).reduce((sum, row) => sum + (row.defect_qty || 0), 0)
       const defectRate = totalProduced > 0 ? totalDefects / totalProduced : 0
 
-      // KPI 4: Month-over-month
-      const thisMonthTotal = (currentMonthData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
-      const prevMonthTotal = (prevMonthData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
+      // KPI 4: Year-over-year change (last 30 days vs same period last year)
+      const thisPeriodTotal = (periodData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
+      const lastYearTotal = (lastYearData || []).reduce((sum, row) => sum + (row.finished_qty || 0), 0)
 
-      const latestMonthNum = parseInt(currentMonth.substring(5, 7))
-      const prevMonthNum = parseInt(prevMonth.substring(5, 7))
+      // Period labels
+      const periodLabel = `${formatShortDate(periodStartStr)} ~ ${formatShortDate(latestDate)}`
+      const lastYearPeriodLabel = `${formatShortDate(lastYearStartStr)} ~ ${formatShortDate(lastYearEndStr)}`
 
       setKpiData({
-        latestDayProduction,
-        operatingEquipment: equipSet.size,
+        periodProduction,
+        operatingEquipment: periodEquipSet.size,
         defectRate,
-        monthChange: thisMonthTotal - prevMonthTotal,
-        latestMonthLabel: `${latestMonthNum}월`,
-        prevMonthLabel: `${prevMonthNum}월`,
+        yearChange: thisPeriodTotal - lastYearTotal,
+        periodLabel,
+        lastYearPeriodLabel,
+        defectPeriodLabel: periodLabel,
       })
     } catch (error) {
       console.error("Error fetching KPI data:", error)
@@ -298,7 +304,6 @@ export default function Dashboard() {
     try {
       const daysBack = getDaysBack(period)
       const { startDate, endDate } = getDateRange(daysBack, latestDate)
-      const currentMonth = latestDate.substring(0, 7)
 
       const { data: productionData } = await supabase
         .from("fact_production")
@@ -309,10 +314,6 @@ export default function Dashboard() {
         .order("production_date", { ascending: true })
 
       if (!productionData) return
-
-      const thisMonthData = productionData.filter(
-        (row) => row.production_date?.substring(0, 7) === currentMonth
-      )
 
       // Daily trend
       const dailyMap = new Map<string, DailyProduction>()
@@ -325,9 +326,9 @@ export default function Dashboard() {
       })
       setDailyTrendData(Array.from(dailyMap.values()))
 
-      // Equipment production
+      // Equipment production (uses full period data)
       const equipmentMap = new Map<string, EquipmentProduction>()
-      thisMonthData.forEach((row) => {
+      productionData.forEach((row) => {
         const equipName = row.equipment_name || "미지정"
         if (!equipmentMap.has(equipName)) equipmentMap.set(equipName, { equipment_name: equipName, total: 0, details: [] })
         const entry = equipmentMap.get(equipName)!
@@ -336,9 +337,9 @@ export default function Dashboard() {
       })
       setEquipmentProductionData(Array.from(equipmentMap.values()))
 
-      // Product mix (top 10)
+      // Product mix (top 10, uses full period data)
       const productMap = new Map<string, ProductData>()
-      thisMonthData.forEach((row) => {
+      productionData.forEach((row) => {
         const prodName = row.product_name || "미지정"
         if (!productMap.has(prodName)) productMap.set(prodName, { product_name: prodName, value: 0, details: [] })
         const entry = productMap.get(prodName)!
@@ -347,14 +348,14 @@ export default function Dashboard() {
       })
       setProductMixData(Array.from(productMap.values()).sort((a, b) => b.value - a.value).slice(0, 10))
 
-      // Equipment utilization
+      // Equipment utilization (uses full period data)
       const { data: productDims } = await supabase
         .from("dim_product")
         .select("equipment_name, daily_max_qty")
         .eq("factory", factory)
 
       const utilMap = new Map<string, { actual: number }>()
-      thisMonthData.forEach((row) => {
+      productionData.forEach((row) => {
         const equipName = row.equipment_name || "미지정"
         if (!utilMap.has(equipName)) utilMap.set(equipName, { actual: 0 })
         utilMap.get(equipName)!.actual += row.finished_qty || 0
@@ -363,7 +364,7 @@ export default function Dashboard() {
       const utilData: EquipmentUtil[] = []
       utilMap.forEach((value, equipName) => {
         const maxQty = productDims?.find((p) => p.equipment_name === equipName)?.daily_max_qty || 0
-        const daysWorked = new Set(thisMonthData.filter((r) => r.equipment_name === equipName).map((r) => r.production_date)).size
+        const daysWorked = new Set(productionData.filter((r) => r.equipment_name === equipName).map((r) => r.production_date)).size
         utilData.push({ equipment_name: equipName, actual: Math.round(value.actual / Math.max(daysWorked, 1)), capacity: maxQty || 0 })
       })
       setEquipmentUtilData(utilData)

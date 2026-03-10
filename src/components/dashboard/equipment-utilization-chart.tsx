@@ -1,6 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { DetailPopup } from "@/components/common/detail-popup"
 import { formatNumber } from "@/lib/utils"
 
 interface EquipmentUtilizationChartProps {
@@ -15,12 +17,14 @@ function GaugeChart({
   label,
   actual,
   capacity,
-  size = 140
+  size = 140,
+  onClick,
 }: {
   label: string
   actual: number
   capacity: number
   size?: number
+  onClick?: () => void
 }) {
   const percentage = capacity > 0 ? Math.min((actual / capacity) * 100, 100) : 0
   const radius = size / 2 - 12
@@ -38,7 +42,10 @@ function GaugeChart({
   const color = getColor(percentage)
 
   return (
-    <div className="flex flex-col items-center">
+    <div
+      className={`flex flex-col items-center ${onClick ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+      onClick={onClick}
+    >
       <svg width={size} height={size / 2 + 20} viewBox={`0 0 ${size} ${size / 2 + 20}`}>
         {/* Background arc */}
         <path
@@ -92,46 +99,72 @@ function GaugeChart({
 export function EquipmentUtilizationChart({
   data,
 }: EquipmentUtilizationChartProps) {
+  const [popupOpen, setPopupOpen] = useState(false)
   const filteredData = data.filter(d => d.capacity > 0)
 
   // Calculate overall utilization
   const totalActual = filteredData.reduce((sum, d) => sum + d.actual, 0)
   const totalCapacity = filteredData.reduce((sum, d) => sum + d.capacity, 0)
 
+  const popupData = filteredData.map(d => {
+    const rate = d.capacity > 0 ? ((d.actual / d.capacity) * 100).toFixed(1) + "%" : "N/A"
+    return {
+      equipment_name: d.equipment_name,
+      actual: formatNumber(d.actual),
+      capacity: formatNumber(d.capacity),
+      rate,
+    }
+  })
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">설비 가동률</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {filteredData.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">데이터가 없습니다</div>
-        ) : (
-          <div className="space-y-4">
-            {/* Overall gauge */}
-            <div className="flex justify-center pb-2 border-b">
-              <GaugeChart
-                label="전체 평균"
-                actual={totalActual}
-                capacity={totalCapacity}
-                size={160}
-              />
-            </div>
-            {/* Individual gauges */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {filteredData.map((item, idx) => (
+    <>
+      <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setPopupOpen(true)}>
+        <CardHeader>
+          <CardTitle className="text-base">설비 가동률</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {filteredData.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">데이터가 없습니다</div>
+          ) : (
+            <div className="space-y-4">
+              {/* Overall gauge */}
+              <div className="flex justify-center pb-2 border-b">
                 <GaugeChart
-                  key={idx}
-                  label={item.equipment_name || "미지정"}
-                  actual={item.actual}
-                  capacity={item.capacity}
-                  size={120}
+                  label="전체 평균"
+                  actual={totalActual}
+                  capacity={totalCapacity}
+                  size={160}
                 />
-              ))}
+              </div>
+              {/* Individual gauges */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                {filteredData.map((item, idx) => (
+                  <GaugeChart
+                    key={idx}
+                    label={item.equipment_name || "미지정"}
+                    actual={item.actual}
+                    capacity={item.capacity}
+                    size={120}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+
+      <DetailPopup
+        open={popupOpen}
+        onOpenChange={setPopupOpen}
+        title="설비별 가동률 상세"
+        columns={[
+          { key: "equipment_name", label: "설비명" },
+          { key: "actual", label: "일평균 생산량" },
+          { key: "capacity", label: "일 최대 생산량" },
+          { key: "rate", label: "가동률" },
+        ]}
+        data={popupData}
+      />
+    </>
   )
 }
