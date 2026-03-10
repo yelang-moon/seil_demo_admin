@@ -165,6 +165,20 @@ export default function Dashboard() {
     return Math.max(1, Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)))
   }
 
+  // Count weekdays (Mon-Fri) between two date strings
+  const getWeekdayCount = (startStr: string, endStr: string): number => {
+    const start = new Date(startStr + "T00:00:00")
+    const end = new Date(endStr + "T00:00:00")
+    let count = 0
+    const current = new Date(start)
+    while (current <= end) {
+      const day = current.getDay()
+      if (day !== 0 && day !== 6) count++
+      current.setDate(current.getDate() + 1)
+    }
+    return Math.max(1, count)
+  }
+
   // Helper: get ISO week string like "2024-W03"
   const getWeekString = (dateStr: string): string => {
     const d = new Date(dateStr + "T00:00:00")
@@ -507,8 +521,8 @@ export default function Dashboard() {
       })
       setEquipCapacities(capacitiesMap)
 
-      // Equipment utilization: totalActual / (daily_max_qty * periodDays)
-      const periodDays = daysBack
+      // Equipment utilization: totalActual / (daily_max_qty * weekdays only)
+      const periodDays = getWeekdayCount(startDate, endDate)
       const utilMap = new Map<string, { actual: number }>()
       productionData.forEach((row) => {
         const equipName = mapName(row.equipment_name) || "미지정"
