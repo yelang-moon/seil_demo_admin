@@ -215,15 +215,34 @@ export function KPICards({
           { key: "equipment_name", label: "설비명" },
           { key: "thisYearQty", label: "올해 생산량" },
           { key: "lastYearQty", label: "작년 생산량" },
-          { key: "change", label: "증감량" },
-          { key: "changePercent", label: "증감률" },
+          {
+            key: "change",
+            label: "증감량",
+            cellClassName: (_value, row) => {
+              const raw = row._changeRaw
+              if (raw > 0) return "text-green-600 font-semibold"
+              if (raw < 0) return "text-red-600 font-semibold"
+              return "text-gray-500"
+            },
+          },
+          {
+            key: "changePercent",
+            label: "증감률",
+            cellClassName: (_value, row) => {
+              const raw = row._changeRaw
+              if (raw > 0) return "text-green-600 font-semibold"
+              if (raw < 0) return "text-red-600 font-semibold"
+              return "text-gray-500"
+            },
+          },
         ]}
         data={lastYearCompareDetails.map(d => ({
           equipment_name: d.equipment_name,
           thisYearQty: formatNumber(d.thisYearQty),
           lastYearQty: formatNumber(d.lastYearQty),
-          change: formatNumber(d.change),
-          changePercent: d.lastYearQty !== 0 ? formatPercent((d.change / d.lastYearQty) * 100) : "-",
+          change: (d.change > 0 ? "+" : "") + formatNumber(d.change),
+          changePercent: d.lastYearQty !== 0 ? ((d.change > 0 ? "+" : "") + formatPercent(d.change / d.lastYearQty)) : "-",
+          _changeRaw: d.change,
         }))}
       />
     </>

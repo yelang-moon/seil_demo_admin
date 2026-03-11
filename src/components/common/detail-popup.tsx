@@ -23,6 +23,7 @@ export interface DetailPopupProps {
   columns: {
     key: string
     label: string
+    cellClassName?: (value: any, row: Record<string, any>) => string
   }[]
   data: Record<string, any>[]
 }
@@ -115,7 +116,7 @@ export function DetailPopup({
                 sortedData.map((row, idx) => (
                   <TableRow key={idx}>
                     {columns.map((col) => (
-                      <TableCell key={col.key}>
+                      <TableCell key={col.key} className={col.cellClassName ? col.cellClassName(row[col.key], row) : undefined}>
                         {row[col.key] ?? "-"}
                       </TableCell>
                     ))}
