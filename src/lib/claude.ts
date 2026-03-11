@@ -1,6 +1,13 @@
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY!
 
-export async function callClaude(systemPrompt: string, userMessage: string): Promise<string> {
+const MODEL_MAP: Record<string, string> = {
+  'claude-opus': 'claude-opus-4-20250514',
+  'claude-sonnet': 'claude-sonnet-4-20250514',
+}
+
+export async function callClaude(systemPrompt: string, userMessage: string, model: string = 'claude-opus'): Promise<string> {
+  const modelId = MODEL_MAP[model] || MODEL_MAP['claude-opus']
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -9,7 +16,7 @@ export async function callClaude(systemPrompt: string, userMessage: string): Pro
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-20250514',
+      model: modelId,
       max_tokens: 2048,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -17,14 +24,18 @@ export async function callClaude(systemPrompt: string, userMessage: string): Pro
   })
 
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`)
+    const errorBody = await response.text().catch(() => 'no body')
+    console.error(`Claude API error ${response.status}:`, errorBody)
+    throw new Error(`Claude API error: ${response.status} - ${errorBody}`)
   }
 
   const data = await response.json()
   return data.content[0].text
 }
 
-export async function streamClaude(systemPrompt: string, userMessage: string) {
+export async function streamClaude(systemPrompt: string, userMessage: string, model: string = 'claude-opus') {
+  const modelId = MODEL_MAP[model] || MODEL_MAP['claude-opus']
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -33,7 +44,7 @@ export async function streamClaude(systemPrompt: string, userMessage: string) {
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-opus-4-20250514',
+      model: modelId,
       max_tokens: 4096,
       stream: true,
       system: systemPrompt,
@@ -42,7 +53,9 @@ export async function streamClaude(systemPrompt: string, userMessage: string) {
   })
 
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`)
+    const errorBody = await response.text().catch(() => 'no body')
+    console.error(`Claude API error ${response.status}:`, errorBody)
+    throw new Error(`Claude API error: ${response.status} - ${errorBody}`)
   }
 
   return response.body

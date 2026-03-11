@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import AIModelSelector from '@/components/ai-model-selector'
+import { type AIModel } from '@/lib/ai-models'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -177,6 +179,7 @@ export default function AIChatPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [dataContext, setDataContext] = useState('')
   const [contextLoading, setContextLoading] = useState(true)
+  const [selectedModel, setSelectedModel] = useState<AIModel>('claude-opus')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -214,22 +217,25 @@ export default function AIChatPage() {
       }
 
       const latestDate = latestRow[0].production_date
-      const endDate = new Date(latestDate)
-      const startDate = new Date(endDate)
-      startDate.setDate(startDate.getDate() - 30)
-      const startStr = startDate.toISOString().split('T')[0]
+
+      // 최초 날짜 조회
+      const { data: earliestRow } = await supabase
+        .from('fact_production')
+        .select('production_date')
+        .eq('factory', factory)
+        .order('production_date', { ascending: true })
+        .limit(1)
+      const earliestDate = earliestRow?.[0]?.production_date || latestDate
 
       const [prodRes, shipRes, equipRes, productRes] = await Promise.all([
         supabase.from('fact_production')
           .select('production_date, equipment_name, product_name, produced_qty, finished_qty, defect_qty, worker_count, work_minutes')
           .eq('factory', factory)
-          .gte('production_date', startStr)
           .lte('production_date', latestDate)
           .range(0, 9999),
         supabase.from('fact_shipment')
           .select('shipment_date, customer_name, product_name, shipped_qty')
           .eq('factory', factory)
-          .gte('shipment_date', startStr)
           .lte('shipment_date', latestDate)
           .range(0, 9999),
         supabase.from('dim_equipment')
@@ -286,7 +292,28 @@ export default function AIChatPage() {
         p.current_stock_qty < p.safety_stock_qty
       )
 
-      let ctx = `분석 기간: ${startStr} ~ ${latestDate} (${factory})\n\n`
+      // 월별 생산 추세
+      const monthlyProd = new Map<string, { qty: number; defect: number; days: Set<string> }>()
+      prods.forEach(r => {
+        const month = r.production_date.substring(0, 7) // YYYY-MM
+        if (!monthlyProd.has(month)) monthlyProd.set(month, { qty: 0, defect: 0, days: new Set() })
+        const m = monthlyProd.get(month)!
+        m.qty += r.produced_qty || r.finished_qty || 0
+        m.defect += r.defect_qty || 0
+        m.days.add(r.production_date)
+      })
+
+      // 월별 출하 추세
+      const monthlyShip = new Map<string, { qty: number; revenue: number }>()
+      ships.forEach(s => {
+        const month = s.shipment_date.substring(0, 7)
+        if (!monthlyShip.has(month)) monthlyShip.set(month, { qty: 0, revenue: 0 })
+        const ms = monthlyShip.get(month)!
+        ms.qty += s.shipped_qty || 0
+        ms.revenue += (s.shipped_qty || 0) * (priceMap.get(s.product_name) || 0)
+      })
+
+      let ctx = `분석 기간: ${earliestDate} ~ ${latestDate} (${factory}, 전체 기간)\n\n`
       ctx += `### 생산 요약\n`
       ctx += `- 총 생산량: ${totalProd.toLocaleString()}, 총 불량: ${totalDefect.toLocaleString()}, 불량률: ${totalProd > 0 ? ((totalDefect / totalProd) * 100).toFixed(2) : 0}%\n`
       ctx += `- 설비별:\n`
@@ -315,6 +342,17 @@ export default function AIChatPage() {
           ctx += `- ${p.product_name}: 현재 ${p.current_stock_qty?.toLocaleString()}, 안전재고 ${p.safety_stock_qty?.toLocaleString()}\n`
         })
       }
+
+      ctx += `\n### 월별 생산 추세\n`
+      Array.from(monthlyProd.entries()).sort().forEach(([month, data]) => {
+        const defectRate = data.qty > 0 ? ((data.defect / data.qty) * 100).toFixed(1) : '0'
+        ctx += `- ${month}: 생산 ${data.qty.toLocaleString()}, 불량 ${data.defect.toLocaleString()} (${defectRate}%), 가동일 ${data.days.size}일\n`
+      })
+
+      ctx += `\n### 월별 출하 추세\n`
+      Array.from(monthlyShip.entries()).sort().forEach(([month, data]) => {
+        ctx += `- ${month}: 출하 ${data.qty.toLocaleString()}개, 매출 ${Math.round(data.revenue).toLocaleString()}원\n`
+      })
 
       ctx += `\n### 제품 마스터 (${products.length}개 제품)\n`
       products.slice(0, 30).forEach(p => {
@@ -350,7 +388,7 @@ export default function AIChatPage() {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: text.trim(), factory, context: dataContext }),
+        body: JSON.stringify({ question: text.trim(), factory, context: dataContext, model: selectedModel }),
       })
 
       if (!response.ok) throw new Error('API error')
@@ -396,10 +434,15 @@ export default function AIChatPage() {
     <div className="flex flex-col h-[calc(100vh-6rem)] animate-fade-in-up">
       {/* Header */}
       <div className="flex-shrink-0 mb-4">
-        <h1 className="text-2xl font-bold">AI 데이터 챗봇</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          {factory} · 최근 30일 생산·출하·재고 데이터 기반 실시간 질의응답
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <h1 className="text-2xl font-bold">AI 데이터 챗봇</h1>
+            <p className="text-gray-500 text-sm mt-1">
+              {factory} · 전체 기간 생산·출하·재고 데이터 기반 실시간 질의응답
+            </p>
+          </div>
+          <AIModelSelector value={selectedModel} onChange={setSelectedModel} disabled={isLoading} compact />
+        </div>
       </div>
 
       {/* Messages Area */}

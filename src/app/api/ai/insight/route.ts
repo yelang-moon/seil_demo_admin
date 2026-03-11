@@ -1,11 +1,15 @@
-import { streamClaude } from '@/lib/claude'
+import { streamAI, type AIModel } from '@/lib/ai'
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchIndustryNews } from '@/lib/external-context'
 import { getInsightKnowledge } from '@/data/knowledge-base'
 
+function isClaudeModel(model: AIModel) {
+  return model.startsWith('claude')
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { period, productionData, equipmentData, productData, shipmentData, safetyStockData, utilizationData } = await request.json()
+    const { period, productionData, equipmentData, productData, shipmentData, safetyStockData, utilizationData, model = 'claude-opus' } = await request.json()
 
     if (!period || !productionData) {
       return NextResponse.json(
@@ -55,8 +59,6 @@ export async function POST(request: NextRequest) {
 - 가동률 95% 이상 설비는 과부하 위험 및 증설 필요성 검토
 - 설비 간 가동률 편차 분석 및 생산 라인 밸런싱 제안`
     }
-
-    // strategicSection already includes 종합 진단 + AI 전략 인사이트
 
     const strategicSectionNum = sectionCount + 2
     const strategicSection = `
@@ -196,7 +198,7 @@ ${JSON.stringify(safetyStockData, null, 2)}`
 ${JSON.stringify(utilizationData.equipmentUtilization, null, 2)}`
     }
 
-    // 지식 베이스 데이터 추가 (글로벌 시장, 규제, 원자재, 경쟁사, 전략 인사이트)
+    // 지식 베이스 데이터 추가
     const knowledgeBase = getInsightKnowledge()
     userMessage += `
 
@@ -205,7 +207,7 @@ ${JSON.stringify(utilizationData.equipmentUtilization, null, 2)}`
 ${knowledgeBase}
 ---`
 
-    // 외부 뉴스/시장 동향 수집 (실시간)
+    // 외부 뉴스/시장 동향 수집
     let externalContext = ''
     try {
       externalContext = await fetchIndustryNews(12)
@@ -230,7 +232,7 @@ ${externalContext}
 을 AI 전략 인사이트 섹션에서 깊이 있게 다루세요.`
     }
 
-    const streamBody = await streamClaude(systemPrompt, userMessage)
+    const streamBody = await streamAI(model as AIModel, systemPrompt, userMessage)
 
     if (!streamBody) {
       return NextResponse.json(
@@ -241,6 +243,7 @@ ${externalContext}
 
     const reader = streamBody.getReader()
     const decoder = new TextDecoder()
+    const useClaudeParsing = isClaudeModel(model)
 
     const readableStream = new ReadableStream({
       async start(controller) {
@@ -258,15 +261,21 @@ ${externalContext}
                   const jsonStr = line.slice(6)
                   const json = JSON.parse(jsonStr)
 
-                  if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-                    const text = json.delta.text
-                    controller.enqueue(text)
-                  } else if (json.type === 'message_stop') {
-                    controller.close()
-                    return
+                  if (useClaudeParsing) {
+                    if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+                      controller.enqueue(json.delta.text)
+                    } else if (json.type === 'message_stop') {
+                      controller.close()
+                      return
+                    }
+                  } else {
+                    const text = json.candidates?.[0]?.content?.parts?.[0]?.text
+                    if (text) {
+                      controller.enqueue(text)
+                    }
                   }
                 } catch {
-                  // Ignore JSON parse errors for non-data lines
+                  // Ignore JSON parse errors
                 }
               }
             }

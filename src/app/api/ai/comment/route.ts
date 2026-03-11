@@ -1,9 +1,9 @@
-import { callClaude } from '@/lib/claude'
+import { callAI, type AIModel } from '@/lib/ai'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { chartType, data } = await request.json()
+    const { chartType, data, model = 'claude-opus' } = await request.json()
 
     if (!chartType || !data) {
       return NextResponse.json({ error: '필수 데이터가 없습니다' }, { status: 400 })
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     const userMessage = `차트 타입: ${chartType}\n\n데이터:\n${JSON.stringify(data, null, 2)}`
 
-    const comment = await callClaude(systemPrompt, userMessage)
+    const comment = await callAI(model as AIModel, systemPrompt, userMessage)
 
     return NextResponse.json({ comment })
   } catch (error) {

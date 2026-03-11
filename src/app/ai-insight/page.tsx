@@ -8,6 +8,8 @@ import { Card } from '@/components/ui/card'
 import { supabase } from '@/lib/supabase'
 import { Production } from '@/types/database'
 import { useFactory } from '@/contexts/factory-context'
+import AIModelSelector from '@/components/ai-model-selector'
+import { type AIModel } from '@/lib/ai-models'
 
 type PresetType = '1month' | '3months' | '6months' | 'custom'
 
@@ -42,6 +44,7 @@ export default function AIInsightPage() {
   const [cachedAt, setCachedAt] = useState<string | null>(null)
   const [reportHistory, setReportHistory] = useState<CacheRecord[]>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [selectedModel, setSelectedModel] = useState<AIModel>('claude-opus')
   const contentRef = useRef<HTMLDivElement>(null)
 
   const applyPreset = (preset: PresetType, baseDate: string) => {
@@ -416,6 +419,7 @@ export default function AIInsightPage() {
           shipmentData,
           safetyStockData,
           utilizationData,
+          model: selectedModel,
         }),
       })
 
@@ -490,7 +494,7 @@ export default function AIInsightPage() {
       <div className="flex-shrink-0 space-y-4 pb-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">AI 인사이트</h1>
-          <p className="text-gray-600 mt-2">Claude AI를 활용한 종합 생산·출하·재고 분석 및 AI 전략 인사이트 리포트</p>
+          <p className="text-gray-600 mt-2">AI를 활용한 종합 생산·출하·재고 분석 및 전략 인사이트 리포트</p>
         </div>
 
         <Card className="p-4">
@@ -523,6 +527,10 @@ export default function AIInsightPage() {
                   className="px-2 py-1 border border-gray-300 rounded text-xs h-7 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-gray-700">AI 모델:</span>
+              <AIModelSelector value={selectedModel} onChange={setSelectedModel} disabled={loading} />
             </div>
             <div className="flex items-center gap-4">
               <Button onClick={handleAnalyze} disabled={loading} size="sm">

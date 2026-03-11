@@ -1,11 +1,16 @@
-import { streamClaude } from '@/lib/claude'
+import { streamAI, type AIModel } from '@/lib/ai'
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchContextualNews } from '@/lib/external-context'
 import { getRelevantKnowledge } from '@/data/knowledge-base'
 
+// Gemini SSE는 Claude SSE와 형식이 다르므로 provider별 파싱
+function isClaudeModel(model: AIModel) {
+  return model.startsWith('claude')
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { question, factory, context } = await request.json()
+    const { question, factory, context, model = 'claude-opus' } = await request.json()
 
     if (!question) {
       return NextResponse.json({ error: '질문이 없습니다' }, { status: 400 })
@@ -71,7 +76,7 @@ ${question}
 
 (내부 데이터 + 지식 베이스 + 외부 뉴스를 종합하여 SEIL의 관점에서 실질적 인사이트를 제공하세요)`
 
-    const streamBody = await streamClaude(systemPrompt, userMessage)
+    const streamBody = await streamAI(model as AIModel, systemPrompt, userMessage)
 
     if (!streamBody) {
       return NextResponse.json({ error: '스트림을 생성할 수 없습니다' }, { status: 500 })
@@ -79,6 +84,7 @@ ${question}
 
     const reader = streamBody.getReader()
     const decoder = new TextDecoder()
+    const useClaudeParsing = isClaudeModel(model)
 
     const readableStream = new ReadableStream({
       async start(controller) {
@@ -88,20 +94,43 @@ ${question}
             if (done) break
 
             const chunk = decoder.decode(value, { stream: true })
-            const lines = chunk.split('\n')
 
-            for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const json = JSON.parse(line.slice(6))
-                  if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
-                    controller.enqueue(json.delta.text)
-                  } else if (json.type === 'message_stop') {
-                    controller.close()
-                    return
+            if (useClaudeParsing) {
+              // Claude SSE 파싱
+              const lines = chunk.split('\n')
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const json = JSON.parse(line.slice(6))
+                    if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+                      controller.enqueue(json.delta.text)
+                    } else if (json.type === 'message_stop') {
+                      controller.close()
+                      return
+                    }
+                  } catch {
+                    // ignore parse errors
                   }
-                } catch {
-                  // ignore parse errors
+                }
+              }
+            } else {
+              // Gemini SSE 파싱
+              const lines = chunk.split('\n')
+              for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    const json = JSON.parse(line.slice(6))
+                    const text = json.candidates?.[0]?.content?.parts?.[0]?.text
+                    if (text) {
+                      controller.enqueue(text)
+                    }
+                    // Gemini finishReason 체크
+                    if (json.candidates?.[0]?.finishReason) {
+                      // 마지막 데이터까지 보낸 후 종료
+                    }
+                  } catch {
+                    // ignore parse errors
+                  }
                 }
               }
             }
