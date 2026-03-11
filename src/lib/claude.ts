@@ -1,8 +1,9 @@
 const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY!
 
 const MODEL_MAP: Record<string, string> = {
-  'claude-opus': 'claude-opus-4-20250514',
-  'claude-sonnet': 'claude-sonnet-4-20250514',
+  'claude-opus': 'claude-opus-4-6',
+  'claude-sonnet': 'claude-sonnet-4-6',
+  'claude-haiku': 'claude-haiku-4-5-20251001',
 }
 
 export async function callClaude(systemPrompt: string, userMessage: string, model: string = 'claude-opus'): Promise<string> {

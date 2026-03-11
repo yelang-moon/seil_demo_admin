@@ -3,6 +3,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY!
 const MODEL_MAP: Record<string, string> = {
   'gemini-flash': 'gemini-2.5-flash',
   'gemini-pro': 'gemini-2.5-pro',
+  'gemini-3-flash': 'gemini-3-flash-preview',
+  'gemini-3-pro': 'gemini-3.1-pro-preview',
 }
 
 export async function callGemini(systemPrompt: string, userMessage: string, model: string = 'gemini-flash'): Promise<string> {

@@ -434,14 +434,15 @@ export default function AIChatPage() {
     <div className="flex flex-col h-[calc(100vh-6rem)] animate-fade-in-up">
       {/* Header */}
       <div className="flex-shrink-0 mb-4">
-        <div className="flex items-center justify-between mb-2">
-          <div>
-            <h1 className="text-2xl font-bold">AI 데이터 챗봇</h1>
-            <p className="text-gray-500 text-sm mt-1">
-              {factory} · 전체 기간 생산·출하·재고 데이터 기반 실시간 질의응답
-            </p>
-          </div>
-          <AIModelSelector value={selectedModel} onChange={setSelectedModel} disabled={isLoading} compact />
+        <div className="mb-2">
+          <h1 className="text-2xl font-bold">AI 데이터 챗봇</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {factory} · 전체 기간 생산·출하·재고 데이터 기반 실시간 질의응답
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-gray-700">AI 모델:</span>
+          <AIModelSelector value={selectedModel} onChange={setSelectedModel} disabled={isLoading} />
         </div>
       </div>
 
