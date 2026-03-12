@@ -18,6 +18,7 @@ import {
   Truck,
   Globe,
   MessageCircle,
+  Radio,
 } from "lucide-react"
 import { useState } from "react"
 import { useFactory, FactoryType } from "@/contexts/factory-context"
@@ -51,6 +52,13 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    label: "데이터 수집",
+    icon: <Radio className="h-4 w-4" />,
+    children: [
+      { label: "수집 관리 감독", href: "/data-collection", icon: <Radio className="h-4 w-4" /> },
+    ],
+  },
+  {
     label: "데이터 관리",
     icon: <Settings className="h-4 w-4" />,
     children: [
@@ -74,6 +82,7 @@ export function Sidebar() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     "대시보드": true,
     "AI": true,
+    "데이터 수집": true,
     "데이터 관리": true,
   })
 

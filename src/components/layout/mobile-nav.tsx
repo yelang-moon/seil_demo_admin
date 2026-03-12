@@ -18,6 +18,7 @@ import {
   Truck,
   Globe,
   MessageCircle,
+  Radio,
 } from "lucide-react"
 import { useState } from "react"
 import { useFactory, FactoryType } from "@/contexts/factory-context"
@@ -31,6 +32,7 @@ const allLinks = [
   { label: "판매 채널 전략", href: "/channel-analysis", icon: <Globe className="h-4 w-4" />, group: "대시보드" },
   { label: "AI 인사이트", href: "/ai-insight", icon: <Bot className="h-4 w-4" />, group: "AI" },
   { label: "AI 챗봇", href: "/ai-chat", icon: <MessageCircle className="h-4 w-4" />, group: "AI" },
+  { label: "수집 관리 감독", href: "/data-collection", icon: <Radio className="h-4 w-4" />, group: "데이터 수집" },
   { label: "장비 관리", href: "/admin/equipment", icon: <Factory className="h-4 w-4" />, group: "데이터 관리" },
   { label: "제품 관리", href: "/admin/products", icon: <Package className="h-4 w-4" />, group: "데이터 관리" },
   { label: "출하량 관리", href: "/admin/shipments", icon: <Truck className="h-4 w-4" />, group: "데이터 관리" },
